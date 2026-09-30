@@ -20,6 +20,7 @@ export interface LegalEntityInfo {
   address?: string;
   email?: string;
   phone?: string;
+  hasLegacyPhonePrefix?: boolean;
   jarStatus?: 'VEIKIANTI' | 'LIKVIDUOJAMA' | 'BANKRUTUOJANTI' | 'NEZINOMA';
   isValidCodeFormat?: boolean;
 }

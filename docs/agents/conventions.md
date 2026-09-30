@@ -12,6 +12,7 @@ How new code should look and where it plugs in. Read this before adding a module
 - `repo:` Kebab-case for module files (`src/lib/audit-engine.ts`, `src/lib/vvtat-checker.ts`).
 - `repo:` Static helper classes with public static methods for domain check engines (`VvtatChecker.isBlocked()`, `JarChecker.validateCompanyCodeFormat()`).
 - `repo:` TypeScript interfaces and types in `src/types/audit.ts` (`TrustAuditResult`, `AuditCheckItem`, `LegalEntityInfo`, `DomainSecurityInfo`).
+- `repo:` Lithuanian telephone standards: national prefix transitioned from legacy `8` to `0` / `+370`. The audit engine penalizes `-10` points for legacy `8`-only contact numbers as a signal of stale/unmaintained websites.
 
 ## Imports
 

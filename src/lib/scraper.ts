@@ -78,12 +78,19 @@ export class WebScraper {
         email = emailMatch[1];
       }
 
-      // 4. Telefono numerio paieška (+370, naujas standartas 0, arba senas 8)
+      // 4. Telefono numerio paieška (+370, naujas standartas 0, arba pasenęs 8)
       let phone: string | undefined;
-      const phoneRegex = /(?:(?:\+370|0|8)(?:[\s.-]?\d){8})\b/;
-      const phoneMatch = bodyText.match(phoneRegex);
-      if (phoneMatch && phoneMatch[0]) {
-        phone = phoneMatch[0].trim();
+      let hasLegacyPhonePrefix = false;
+      const allPhoneMatches = Array.from(bodyText.matchAll(/(?:(?:\+370|0|8)(?:[\s.-]?\d){8})\b/g));
+      if (allPhoneMatches.length > 0) {
+        const modernMatch = allPhoneMatches.find(m => m[0].startsWith('+370') || m[0].startsWith('0'));
+        if (modernMatch) {
+          phone = modernMatch[0].trim();
+          hasLegacyPhonePrefix = false;
+        } else {
+          phone = allPhoneMatches[0][0].trim();
+          hasLegacyPhonePrefix = true;
+        }
       }
 
       // 5. Adreso paieška porštėje ar tekste
@@ -124,6 +131,7 @@ export class WebScraper {
           vatCode,
           email,
           phone,
+          hasLegacyPhonePrefix,
           address,
         },
         consumerProtection: {

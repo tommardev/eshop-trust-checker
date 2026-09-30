@@ -32,6 +32,7 @@ export class AuditEngine {
       ...legalInfo,
       email: legalInfo.email || scrapedData.legalEntity.email,
       phone: legalInfo.phone || scrapedData.legalEntity.phone,
+      hasLegacyPhonePrefix: scrapedData.legalEntity.hasLegacyPhonePrefix ?? false,
       address: legalInfo.address || scrapedData.legalEntity.address,
       vatCode: legalInfo.vatCode || scrapedData.legalEntity.vatCode,
     };
@@ -188,6 +189,20 @@ export class AuditEngine {
       });
     }
 
+    // G. Telefono numerio formato patikra (naujas RRT 0 / +370 vs pasenęs 8)
+    if (mergedLegal.hasLegacyPhonePrefix) {
+      score -= 10;
+      checklist.push({
+        id: 'legacy-phone-prefix',
+        category: 'LEGAL',
+        title: 'Pasenęs ryšio numerio formatas (prefiksas 8)',
+        status: 'WARN',
+        description: `Svetainėje nurodytas telefono numeris (${mergedLegal.phone}) naudoja nebegaliojantį prefiksą „8“ vietoje naujojo standarto „0“ arba „+370“. Tai rodo, kad kontaktiniai duomenys ilgą laiką neatnaujinti ir svetainė gali būti apleista.`,
+        sourceReference: 'Ryšių reguliavimo tarnybos (RRT) nacionalinis numeracijos planas',
+        sourceUrl: 'https://www.rrt.lt/',
+      });
+    }
+
     // Apskaičiuojame galutinį balą ir lygį
     const finalScore = Math.max(0, Math.min(100, score));
     let trustLevel: TrustLevel = 'SAFE';
@@ -215,6 +230,10 @@ export class AuditEngine {
     } else {
       recommendations.push('Pardavėjas atitinka VVTAT reikalavimus ir turi registruotus rekvizitus.');
       recommendations.push('Išsaugokite pirkimo patvirtinimo sąskaitą faktūrą ir užsakymo el. laišką.');
+    }
+
+    if (mergedLegal.hasLegacyPhonePrefix) {
+      recommendations.push('Atkreipkite dėmesį: svetainėje nurodytas pasenusio formato telefono numeris (su prefiksu 8). Prieš pirkdami patikrinkite, ar pardavėjas atsako.');
     }
 
     return {
