@@ -43,3 +43,47 @@ Vartotojai, ieškodami prekių internete (pvz., perkant auksą, elektroniką, dr
   * Domain & SSL Inspector (`tls`, `whois-json` / RDAP).
   * VVTAT & Registry Client (sinchronizuojama duomenų bazė / API adapteriai).
 * **Caching & Storage**: SQLite / PostgreSQL / Redis (rezultatų talpinimui, kad pakartotinės užklausos veiktų akimirksniu).
+
+---
+
+## 🚀 Paleidimas ir Vystymas (Getting Started)
+
+### Reikalavimai
+- Node.js 18+ arba 20+
+- npm arba pnpm
+
+### Komandos
+
+```bash
+# Įdiegti priklausomybes
+npm install
+
+# Paleisti vystymo serverį
+npm run dev
+
+# Sukompiliuoti produkcijai
+npm run build
+
+# Paleisti produkcijos serverį
+npm run start
+
+# Paleisti linterį
+npm run lint
+
+# Paleisti TypeScript tipo patikrą
+npx tsc --noEmit
+```
+
+---
+
+## 🤖 AI Agentic Workflow
+
+- **Coding agents:** [`AGENTS.md`](AGENTS.md)
+- **Humans (AI workflow cheat sheet):** [`AI_CODING_README.md`](AI_CODING_README.md)
+- **Intros & Tutorials:** [`AI_CODING_LEARN.md`](AI_CODING_LEARN.md)
+
+Naujas komandos narys ar nauja darbo vieta: atkurti agentų įrankius paleidus:
+```bash
+npx skills experimental_install --yes
+```
+(Jokiu būdu nepergeneruokite `AGENTS.md` ar komandos taisyklių).
