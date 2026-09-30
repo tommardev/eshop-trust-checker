@@ -1,4 +1,4 @@
-import { LegalEntityInfo } from '../types/audit';
+import type { LegalEntityInfo } from '../types/audit';
 
 export class JarChecker {
   /**

@@ -1,4 +1,4 @@
-import blockedCache from '../data/vvtat-blocked-cache.json';
+import blockedCache from '../data/vvtat-blocked-cache.json' with { type: 'json' };
 
 export class VvtatChecker {
   private static blockedSet: Set<string> = new Set(
