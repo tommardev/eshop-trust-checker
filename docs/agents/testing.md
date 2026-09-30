@@ -25,7 +25,7 @@ Unit test conventions (`repo:`) win. Golden defaults (`golden:`) guide coverage 
    - Blacklist hit immediately reduces trust score to 0 and triggers 'DANGEROUS' status.
    - Missing company rekvizitai penalty (-35 score).
 4. **Scraper Heuristics (`src/lib/scraper.ts`)**:
-   - Extraction of company code, VAT code, phone (+370 and 8), email, address, and return policy signals.
+   - Extraction of company code, VAT code, phone numbers (+370 international, new national standard starting with 0, and legacy 8 prefix), email, address, and return policy signals.
 
 ## Commands
 

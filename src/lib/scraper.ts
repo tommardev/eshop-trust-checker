@@ -78,12 +78,12 @@ export class WebScraper {
         email = emailMatch[1];
       }
 
-      // 4. Telefono numerio paieška (+370...)
+      // 4. Telefono numerio paieška (+370, naujas standartas 0, arba senas 8)
       let phone: string | undefined;
-      const phoneRegex = /(\+370\s?[0-9]{1,3}\s?[0-9]{2,3}\s?[0-9]{3}|8\s?[0-9]{3}\s?[0-9]{5})/i;
+      const phoneRegex = /(?:(?:\+370|0|8)(?:[\s.-]?\d){8})\b/;
       const phoneMatch = bodyText.match(phoneRegex);
-      if (phoneMatch && phoneMatch[1]) {
-        phone = phoneMatch[1];
+      if (phoneMatch && phoneMatch[0]) {
+        phone = phoneMatch[0].trim();
       }
 
       // 5. Adreso paieška porštėje ar tekste
