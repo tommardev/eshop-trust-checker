@@ -2,6 +2,9 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { VvtatChecker } from '../vvtat-checker.ts';
 import { JarChecker } from '../jar-checker.ts';
+import { Security } from '../security.ts';
+import { LbChecker } from '../lb-checker.ts';
+import { AuditEngine } from '../audit-engine.ts';
 
 describe('VvtatChecker.normalizeDomain', () => {
   describe('protocol stripping', () => {
@@ -198,5 +201,88 @@ describe('JarChecker.validateCompanyCodeFormat', () => {
       assert.strictEqual(JarChecker.validateCompanyCodeFormat('!@#$%^&*()'), false);
       assert.strictEqual(JarChecker.validateCompanyCodeFormat('LT-INVALID'), false);
     });
+  });
+});
+
+describe('Security.isPrivateOrBlockedIp (SSRF Protection)', () => {
+  it('should identify loopback addresses as blocked', () => {
+    assert.strictEqual(Security.isPrivateOrBlockedIp('127.0.0.1'), true);
+    assert.strictEqual(Security.isPrivateOrBlockedIp('127.0.1.5'), true);
+    assert.strictEqual(Security.isPrivateOrBlockedIp('::1'), true);
+  });
+
+  it('should identify private RFC 1918 networks as blocked', () => {
+    assert.strictEqual(Security.isPrivateOrBlockedIp('10.0.0.1'), true);
+    assert.strictEqual(Security.isPrivateOrBlockedIp('172.16.0.1'), true);
+    assert.strictEqual(Security.isPrivateOrBlockedIp('172.31.255.254'), true);
+    assert.strictEqual(Security.isPrivateOrBlockedIp('192.168.1.1'), true);
+  });
+
+  it('should identify cloud metadata addresses as blocked', () => {
+    assert.strictEqual(Security.isPrivateOrBlockedIp('169.254.169.254'), true);
+  });
+
+  it('should allow legitimate public IP addresses', () => {
+    assert.strictEqual(Security.isPrivateOrBlockedIp('8.8.8.8'), false);
+    assert.strictEqual(Security.isPrivateOrBlockedIp('1.1.1.1'), false);
+    assert.strictEqual(Security.isPrivateOrBlockedIp('185.199.108.153'), false);
+  });
+});
+
+describe('LbChecker.isFlagged', () => {
+  it('should flag known fraudulent/unlicensed financial domains', () => {
+    assert.strictEqual(LbChecker.isFlagged('crypto-invest.com').isFlagged, true);
+    assert.strictEqual(LbChecker.isFlagged('https://quick-loan-fast.eu/login').isFlagged, true);
+  });
+
+  it('should not flag standard trusted e-shops', () => {
+    assert.strictEqual(LbChecker.isFlagged('pigu.lt').isFlagged, false);
+    assert.strictEqual(LbChecker.isFlagged('kalykla.lt').isFlagged, false);
+  });
+});
+
+describe('VvtatChecker.isBlocked', () => {
+  it('should flag domains known in VVTAT blacklist cache', () => {
+    const blockedList = VvtatChecker.getAllBlocked();
+    if (blockedList.length > 0) {
+      const sampleBlocked = blockedList[0];
+      assert.strictEqual(VvtatChecker.isBlocked(sampleBlocked).isBlocked, true);
+      assert.strictEqual(VvtatChecker.isBlocked(`https://www.${sampleBlocked}/catalog`).isBlocked, true);
+    }
+  });
+
+  it('should not flag legitimate shops', () => {
+    assert.strictEqual(VvtatChecker.isBlocked('kalykla.lt').isBlocked, false);
+    assert.strictEqual(VvtatChecker.isBlocked('pigu.lt').isBlocked, false);
+    assert.strictEqual(VvtatChecker.isBlocked('senukai.lt').isBlocked, false);
+  });
+});
+
+describe('AuditEngine.analyze', () => {
+  it('should immediately set score to 0 and DANGEROUS for VVTAT blocked domains', async () => {
+    const blockedList = VvtatChecker.getAllBlocked();
+    if (blockedList.length > 0) {
+      const blockedDomain = blockedList[0];
+      const result = await AuditEngine.analyze(blockedDomain);
+      assert.strictEqual(result.trustScore, 0);
+      assert.strictEqual(result.trustLevel, 'DANGEROUS');
+      assert.strictEqual(result.blacklist.isVvtatBlocked, true);
+    }
+  });
+
+  it('should rate known trusted state enterprise (kalykla.lt) as SAFE with score >= 90', async () => {
+    const result = await AuditEngine.analyze('kalykla.lt');
+    assert.strictEqual(result.trustLevel, 'SAFE');
+    assert.ok(result.trustScore >= 90, `Expected score >= 90, got ${result.trustScore}`);
+    assert.strictEqual(result.legalEntity.found, true);
+    assert.strictEqual(result.legalEntity.companyCode, '120153835');
+    assert.strictEqual(result.blacklist.isVvtatBlocked, false);
+  });
+
+  it('should evaluate known marketplace (pigu.lt) verifying legal entity recognition', async () => {
+    const result = await AuditEngine.analyze('pigu.lt');
+    assert.strictEqual(result.legalEntity.found, true);
+    assert.strictEqual(result.legalEntity.isValidCodeFormat, true);
+    assert.strictEqual(result.blacklist.isVvtatBlocked, false);
   });
 });

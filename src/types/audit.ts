@@ -14,26 +14,33 @@ export interface AuditCheckItem {
 
 export interface LegalEntityInfo {
   found: boolean;
+  companyFound?: boolean;
   companyCode?: string;
   companyName?: string;
   vatCode?: string;
+  hasVatCode?: boolean;
   address?: string;
+  physicalAddress?: string;
   email?: string;
   phone?: string;
   hasLegacyPhonePrefix?: boolean;
   jarStatus?: 'VEIKIANTI' | 'LIKVIDUOJAMA' | 'BANKRUTUOJANTI' | 'NEZINOMA';
   isValidCodeFormat?: boolean;
+  isLithuanianOrEu: boolean;
 }
 
 export interface DomainSecurityInfo {
   domain: string;
   isHttps: boolean;
+  hasValidSsl: boolean;
   sslValid: boolean;
   sslIssuer?: string;
+  sslValidUntil?: string;
   registrationDate?: string;
+  domainCreatedDate?: string;
   domainAgeDays?: number;
   domainAgeMonths?: number;
-  isNewDomain: boolean; // < 90 days
+  isNewDomain: boolean; // < 90 days / 3 months
 }
 
 export interface ConsumerProtectionInfo {
@@ -41,36 +48,59 @@ export interface ConsumerProtectionInfo {
   hasPrivacyPolicy: boolean;
   hasContactsPage: boolean;
   detectedPaymentMethods: string[];
+  paymentMethodsDetected: string[];
   hasDirectBankTransferOnly: boolean;
+  suspiciousIndicators: string[];
+}
+
+export interface RecommendationKeyPoint {
+  type: 'success' | 'warning' | 'danger' | 'info';
+  title: string;
+  description: string;
+}
+
+export interface StructuredRecommendations {
+  verdict: string;
+  keyPoints: RecommendationKeyPoint[];
+  vvtatAdviceLink: string;
+  list: string[];
+}
+
+export interface BlacklistStatus {
+  isVvtatBlocked: boolean;
+  vvtatDetails?: string;
+  isLbFlagged: boolean;
+  lbDetails?: string;
+}
+
+export interface VvtatRulesMatched {
+  rule1SellerIdentity: boolean;
+  rule2PriceHeuristics: boolean;
+  rule3ReviewsIndication: boolean;
+  rule4PaymentSafety: boolean;
+  rule5Jurisdiction: boolean;
 }
 
 export interface TrustAuditResult {
   query: string;
+  url: string;
   normalizedUrl: string;
   domain: string;
+  normalizedDomain: string;
   timestamp: string;
   trustScore: number; // 0 - 100
   trustLevel: TrustLevel;
   verdictSummary: string;
   
-  blacklist: {
-    isVvtatBlocked: boolean;
-    vvtatDetails?: string;
-    isLbFlagged: boolean;
-    lbDetails?: string;
-  };
+  blacklist: BlacklistStatus;
+  blacklistStatus: BlacklistStatus;
 
   legalEntity: LegalEntityInfo;
   domainSecurity: DomainSecurityInfo;
+  technicalSecurity: DomainSecurityInfo;
   consumerProtection: ConsumerProtectionInfo;
   
   checklist: AuditCheckItem[];
-  vvtatRulesMatched: {
-    rule1SellerIdentity: boolean;
-    rule2PriceHeuristics: boolean;
-    rule3ReviewsIndication: boolean;
-    rule4PaymentSafety: boolean;
-    rule5Jurisdiction: boolean;
-  };
-  recommendations: string[];
+  vvtatRulesMatched: VvtatRulesMatched;
+  recommendations: StructuredRecommendations;
 }

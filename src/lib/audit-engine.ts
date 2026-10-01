@@ -1,28 +1,44 @@
-import { VvtatChecker } from './vvtat-checker';
-import { WhoisChecker } from './whois-checker';
-import { WebScraper } from './scraper';
-import { JarChecker } from './jar-checker';
-import { 
+import { VvtatChecker } from './vvtat-checker.ts';
+import { WhoisChecker } from './whois-checker.ts';
+import { WebScraper } from './scraper.ts';
+import { JarChecker } from './jar-checker.ts';
+import { SslChecker } from './ssl-checker.ts';
+import { LbChecker } from './lb-checker.ts';
+import type { 
   TrustAuditResult, 
   AuditCheckItem, 
-  TrustLevel 
-} from '../types/audit';
+  TrustLevel,
+  RecommendationKeyPoint,
+  DomainSecurityInfo,
+} from '../types/audit.ts';
 
 export class AuditEngine {
   /**
-   * Atlieka pilną svetainės patikimumo auditą
+   * Atlieka pilną svetainės patikimumo auditą lygiagrečiu būdu
    */
   public static async analyze(inputQuery: string): Promise<TrustAuditResult> {
     const rawDomain = VvtatChecker.normalizeDomain(inputQuery);
     const normalizedUrl = `https://${rawDomain}`;
     const timestamp = new Date().toISOString();
 
-    // 1. Lygiagretus duomenų surinkimas
-    const [blacklistCheck, whoisInfo, scrapedData] = await Promise.all([
+    // 1. Lygiagretus duomenų surinkimas (VVTAT, LB, WHOIS, SSL, Scraping)
+    const [blacklistCheck, lbCheck, whoisInfo, sslInfo, scrapedData] = await Promise.all([
       Promise.resolve(VvtatChecker.isBlocked(rawDomain)),
+      Promise.resolve(LbChecker.isFlagged(rawDomain)),
       WhoisChecker.checkDomain(rawDomain),
+      SslChecker.checkCertificate(rawDomain),
       WebScraper.analyzeWebsite(normalizedUrl),
     ]);
+
+    // Apjungiame domeno ir SSL techninius duomenis
+    const technicalSecurity: DomainSecurityInfo = {
+      ...whoisInfo,
+      isHttps: sslInfo.hasValidSsl || whoisInfo.isHttps,
+      hasValidSsl: sslInfo.hasValidSsl,
+      sslValid: sslInfo.sslValid,
+      sslIssuer: sslInfo.issuer || whoisInfo.sslIssuer || 'Let\'s Encrypt / DigiCert / GlobalSign',
+      sslValidUntil: sslInfo.validTo,
+    };
 
     // 2. Juridinio asmens tikrinimas (JAR / Rekvizitai)
     const legalInfo = JarChecker.lookupEntity(rawDomain, scrapedData.legalEntity.companyCode);
@@ -34,11 +50,17 @@ export class AuditEngine {
       phone: legalInfo.phone || scrapedData.legalEntity.phone,
       hasLegacyPhonePrefix: scrapedData.legalEntity.hasLegacyPhonePrefix ?? false,
       address: legalInfo.address || scrapedData.legalEntity.address,
+      physicalAddress: legalInfo.physicalAddress || scrapedData.legalEntity.address,
       vatCode: legalInfo.vatCode || scrapedData.legalEntity.vatCode,
+      hasVatCode: !!(legalInfo.vatCode || scrapedData.legalEntity.vatCode),
+      companyFound: legalInfo.companyFound || scrapedData.legalEntity.companyFound || false,
+      isLithuanianOrEu: legalInfo.isLithuanianOrEu || scrapedData.legalEntity.isLithuanianOrEu || false,
     };
 
-    // 3. Kontrolinio sąrašo (Checklist) sudarymas
+    // 3. Kontrolinio sąrašo (Checklist) sudarymas ir balų skaičiavimas
     const checklist: AuditCheckItem[] = [];
+    const keyPoints: RecommendationKeyPoint[] = [];
+    const recommendationList: string[] = [];
     let score = 100;
 
     // A. VVTAT Blokuojamų sąrašas (Kritinis)
@@ -53,6 +75,11 @@ export class AuditEngine {
         sourceReference: 'LR Teisingumo ministerija ir VVTAT',
         sourceUrl: 'https://vvtat.lrv.lt/lt/blokuojami-tinklalapiai-646/'
       });
+      keyPoints.push({
+        type: 'danger',
+        title: 'Kritinis pavojus: Teismo sprendimu blokuojama svetainė',
+        description: 'VVTAT ir teismo sprendimu prieiga prie šio domeno Lietuvoje yra apribota dėl vartotojų teisių pažeidimų.'
+      });
     } else {
       checklist.push({
         id: 'vvtat-blacklist',
@@ -65,7 +92,26 @@ export class AuditEngine {
       });
     }
 
-    // B. Juridinio asmens tapatybė (VVTAT Taisyklė #1)
+    // B. Lietuvos Banko įspėjimų sąrašas
+    if (lbCheck.isFlagged) {
+      score = 0;
+      checklist.push({
+        id: 'lb-blacklist',
+        category: 'BLACKLIST',
+        title: 'Lietuvos banko įspėjimų registras',
+        status: 'FAIL',
+        description: lbCheck.reason || 'Domenas įtrauktas į LB nepatikimų finansinių subjektų sąrašą.',
+        sourceReference: 'Lietuvos Bankas',
+        sourceUrl: 'https://www.lb.lt/'
+      });
+      keyPoints.push({
+        type: 'danger',
+        title: 'Lietuvos banko įspėjimas',
+        description: 'Subjektas neturi teisės teikti finansinių paslaugų Lietuvos Respublikoje.'
+      });
+    }
+
+    // C. Juridinio asmens tapatybė (VVTAT Taisyklė #1)
     if (mergedLegal.found && mergedLegal.companyCode) {
       if (mergedLegal.isValidCodeFormat !== false) {
         checklist.push({
@@ -76,6 +122,11 @@ export class AuditEngine {
           description: `Rastas registruotas juridinis asmuo (${mergedLegal.companyName || 'Įmonės kodas: ' + mergedLegal.companyCode}). Nurodytas buveinės adresas ir kontaktai.`,
           sourceReference: 'VVTAT 1-oji auksinė taisyklė ir Registrų Centras',
         });
+        keyPoints.push({
+          type: 'success',
+          title: 'Oficialūs pardavėjo rekvizitai rasti',
+          description: `Identifikuotas juridinis asmuo su galiojančiu 9 skaitmenų JAR kodu (${mergedLegal.companyCode}).`
+        });
       } else {
         score -= 25;
         checklist.push({
@@ -85,6 +136,11 @@ export class AuditEngine {
           status: 'WARN',
           description: `Svetainėje nurodytas įmonės kodas (${mergedLegal.companyCode}) neatitinka Lietuvos juridinio asmens kontrolinio skaičiaus formato.`,
           sourceReference: 'Registrų Centro JAR formatas',
+        });
+        keyPoints.push({
+          type: 'warning',
+          title: 'Neteisingas įmonės kodo formatas',
+          description: `Nurodytas kodas ${mergedLegal.companyCode} neatitinka Modulo 11 kontrolinio skaitmens.`
         });
       }
     } else {
@@ -98,10 +154,15 @@ export class AuditEngine {
         sourceReference: 'VVTAT 1-oji taisyklė: Patikrinkite informaciją apie pardavėją',
         sourceUrl: 'https://vvtat.lrv.lt/lt/naujienos-ir-pranesimai-ziniasklaidai-377/fiktyvios-internetines-parduotuves-kaip-atpazinti-ir-neapsigauti-977/'
       });
+      keyPoints.push({
+        type: 'danger',
+        title: 'Nėra nurodyto juridinio asmens',
+        description: 'Pardavėjas neskelbia įmonės kodo ir buveinės adreso. Didelė rizika susidurti su sukčiais.'
+      });
     }
 
-    // C. Domeno amžius (WHOIS)
-    if (whoisInfo.isNewDomain) {
+    // D. Domeno amžius (WHOIS)
+    if (technicalSecurity.isNewDomain) {
       score -= 25;
       checklist.push({
         id: 'domain-age',
@@ -111,8 +172,13 @@ export class AuditEngine {
         description: `Domenas registruotas neseniai (< 90 dienų). Dauguma fiktyvių svetainių sukuriamos trumpam prieš pradedant sukčiavimą.`,
         sourceReference: 'DOMREG / WHOIS registras',
       });
+      keyPoints.push({
+        type: 'warning',
+        title: 'Naujai registruotas domenas',
+        description: 'Domenas veikia mažiau nei 3 mėnesius. Būkite atsargūs atlikdami išankstinius apmokėjimus.'
+      });
     } else {
-      const ageText = whoisInfo.domainAgeMonths ? `(apie ${Math.floor(whoisInfo.domainAgeMonths / 12)} m. / ${whoisInfo.domainAgeMonths} mėn.)` : '';
+      const ageText = technicalSecurity.domainAgeMonths ? `(apie ${Math.floor(technicalSecurity.domainAgeMonths / 12)} m. / ${technicalSecurity.domainAgeMonths} mėn.)` : '';
       checklist.push({
         id: 'domain-age',
         category: 'TECHNICAL',
@@ -123,14 +189,14 @@ export class AuditEngine {
       });
     }
 
-    // D. SSL / HTTPS šifravimas (VVTAT Taisyklė #4)
-    if (whoisInfo.sslValid) {
+    // E. SSL / HTTPS šifravimas (VVTAT Taisyklė #4)
+    if (technicalSecurity.sslValid) {
       checklist.push({
         id: 'ssl-security',
         category: 'TECHNICAL',
         title: 'Mokėjimo kortelių ir ryšio šifravimas (SSL)',
         status: 'PASS',
-        description: 'Svetainė naudoja saugų HTTPS šifruotą ryšį. Naršyklėje rodomas spynos simbolis.',
+        description: `Svetainė naudoja saugų HTTPS šifruotą ryšį (${technicalSecurity.sslIssuer || 'Sertifikuota'}). Naršyklėje rodomas spynos simbolis.`,
         sourceReference: 'VVTAT 4-oji taisyklė: Saugokite mokėjimo duomenis',
       });
     } else {
@@ -143,9 +209,14 @@ export class AuditEngine {
         description: 'Svetainėje nėra galiojančio saugaus SSL sertifikato! Įvedami duomenys ir mokėjimo kortelės gali būti perimtos.',
         sourceReference: 'VVTAT 4-oji taisyklė',
       });
+      keyPoints.push({
+        type: 'danger',
+        title: 'Nesaugus arba negaliojantis SSL ryšys',
+        description: 'Nesuveskite slaptažodžių ar banko kortelių duomenų neužšifruotoje svetainėje.'
+      });
     }
 
-    // E. Vartotojų teisės (Prekių grąžinimas - 14 dienų)
+    // F. Vartotojų teisės (Prekių grąžinimas - 14 dienų)
     if (scrapedData.consumerProtection.hasReturnPolicy) {
       checklist.push({
         id: 'return-policy',
@@ -165,9 +236,14 @@ export class AuditEngine {
         description: 'Nerasta aiški 14 dienų prekių grąžinimo garantija ar atsisakymo taisyklės.',
         sourceReference: 'LR Civilinis kodeksas',
       });
+      keyPoints.push({
+        type: 'warning',
+        title: 'Pasigesta aiškių grąžinimo taisyklių',
+        description: 'Pardavėjas nepateikia aiškios informacijos apie 14 dienų grąžinimo teisę.'
+      });
     }
 
-    // F. Mokėjimo metodai
+    // G. Mokėjimo metodai
     if (scrapedData.consumerProtection.detectedPaymentMethods.length > 0) {
       checklist.push({
         id: 'payment-gateways',
@@ -187,9 +263,14 @@ export class AuditEngine {
         description: 'Siūlomas tik tiesioginis bankinis pavedimas. Fiktyvios parduotuvės dažnai neturi sutarties su mokėjimo tarpininkais.',
         sourceReference: 'VVTAT rekomendacija rinktis saugius atsiskaitymus',
       });
+      keyPoints.push({
+        type: 'warning',
+        title: 'Tik tiesioginis bankinis pavedimas',
+        description: 'Svetainė neturi integruotų mokėjimo tarpininkų (Paysera, Montonio, Stripe ir kt.).'
+      });
     }
 
-    // G. Telefono numerio formato patikra (naujas RRT 0 / +370 vs pasenęs 8)
+    // H. Telefono numerio formato patikra (naujas RRT 0 / +370 vs pasenęs 8)
     if (mergedLegal.hasLegacyPhonePrefix) {
       score -= 10;
       checklist.push({
@@ -201,66 +282,79 @@ export class AuditEngine {
         sourceReference: 'Ryšių reguliavimo tarnybos (RRT) nacionalinis numeracijos planas',
         sourceUrl: 'https://www.rrt.lt/',
       });
+      keyPoints.push({
+        type: 'warning',
+        title: 'Apleisti kontaktai (prefiksas 8)',
+        description: 'Telefono numeris neatnaujintas pagal naująjį Lietuvos numeracijos standartą.'
+      });
     }
 
-    // Apskaičiuojame galutinį balą ir lygį
+    // Apskaičiuojame galutinį balą ir lygį pagal PRD.md (90-100 SAFE, 50-89 CAUTION, 0-49 DANGEROUS)
     const finalScore = Math.max(0, Math.min(100, score));
     let trustLevel: TrustLevel = 'SAFE';
     let verdictSummary = '';
 
-    if (finalScore >= 85) {
+    if (finalScore >= 90) {
       trustLevel = 'SAFE';
       verdictSummary = 'Svetainė atrodo patikima ir legali. Nurodyti juridinio asmens rekvizitai, ilgalaikis domenas, galiojantis SSL šifravimas bei vartotojų teisių politikos.';
+      recommendationList.push('Pardavėjas atitinka VVTAT reikalavimus ir turi registruotus rekvizitus.');
+      recommendationList.push('Išsaugokite pirkimo patvirtinimo sąskaitą faktūrą ir užsakymo el. laišką.');
     } else if (finalScore >= 50) {
       trustLevel = 'CAUTION';
       verdictSummary = 'Būkite atsargūs. Trūksta dalies rekvizitų arba domenas yra labai naujas. Rekomenduojama rinktis atsiskaitymą atsiimant prekes (COD).';
+      recommendationList.push('Prieš perkant susisiekite nurodytu telefonu ar el. paštu ir įsitikinkite, kad pardavėjas atsako.');
+      recommendationList.push('Rinkitės atsiskaitymą kurjeriui atsiimant prekę (COD), o ne išankstinį banko pavedimą.');
     } else {
       trustLevel = 'DANGEROUS';
       verdictSummary = 'Aukšta rizika arba fiktyvi parduotuvė! Svetainė įtraukta į juoduosius sąrašus arba neskelbia savo juridinio asmens tapatybės.';
-    }
-
-    // Rekomendacijos vartotojui
-    const recommendations: string[] = [];
-    if (trustLevel === 'DANGEROUS') {
-      recommendations.push('Primygtinai rekomenduojame NEPIRKTI šioje svetainėje ir nesuvedinėti banko kortelių duomenų.');
-      recommendations.push('Jei jau atlikote mokėjimą ir negavote prekės, kuo skubiau kreipkitės į savo banką dėl pinigų susigrąžinimo (chargeback).');
-    } else if (trustLevel === 'CAUTION') {
-      recommendations.push('Prieš perkant susisiekite nurodytu telefonu ar el. paštu ir įsitikinkite, kad pardavėjas atsako.');
-      recommendations.push('Rinkitės atsiskaitymą kurjeriui atsiimant prekę, o ne išankstinį banko pavedimą.');
-    } else {
-      recommendations.push('Pardavėjas atitinka VVTAT reikalavimus ir turi registruotus rekvizitus.');
-      recommendations.push('Išsaugokite pirkimo patvirtinimo sąskaitą faktūrą ir užsakymo el. laišką.');
+      recommendationList.push('Primygtinai rekomenduojame NEPIRKTI šioje svetainėje ir nesuvedinėti banko kortelių duomenų.');
+      recommendationList.push('Jei jau atlikote mokėjimą ir negavote prekės, kuo skubiau kreipkitės į savo banką dėl pinigų susigrąžinimo (chargeback).');
     }
 
     if (mergedLegal.hasLegacyPhonePrefix) {
-      recommendations.push('Atkreipkite dėmesį: svetainėje nurodytas pasenusio formato telefono numeris (su prefiksu 8). Prieš pirkdami patikrinkite, ar pardavėjas atsako.');
+      recommendationList.push('Atkreipkite dėmesį: svetainėje nurodytas pasenusio formato telefono numeris (su prefiksu 8). Prieš pirkdami patikrinkite, ar pardavėjas atsako.');
     }
+
+    // VVTAT 5 auksinių taisyklių tikrinimas
+    const vvtatRulesMatched = {
+      rule1SellerIdentity: mergedLegal.found && !!mergedLegal.companyCode && mergedLegal.isValidCodeFormat !== false,
+      rule2PriceHeuristics: !/99%\s*nuolaida|nemokamai\s*tik\s*šiandien/i.test(scrapedData.rawTitle),
+      rule3ReviewsIndication: mergedLegal.found && scrapedData.consumerProtection.hasContactsPage,
+      rule4PaymentSafety: technicalSecurity.sslValid && !scrapedData.consumerProtection.hasDirectBankTransferOnly,
+      rule5Jurisdiction: mergedLegal.isLithuanianOrEu && !blacklistCheck.isBlocked && !lbCheck.isFlagged,
+    };
+
+    const blacklistStatus = {
+      isVvtatBlocked: blacklistCheck.isBlocked,
+      vvtatDetails: blacklistCheck.reason,
+      isLbFlagged: lbCheck.isFlagged,
+      lbDetails: lbCheck.reason,
+    };
 
     return {
       query: inputQuery,
+      url: normalizedUrl,
       normalizedUrl,
       domain: rawDomain,
+      normalizedDomain: rawDomain,
       timestamp,
       trustScore: finalScore,
       trustLevel,
       verdictSummary,
-      blacklist: {
-        isVvtatBlocked: blacklistCheck.isBlocked,
-        vvtatDetails: blacklistCheck.reason,
-        isLbFlagged: false,
-      },
+      blacklist: blacklistStatus,
+      blacklistStatus,
       legalEntity: mergedLegal,
-      domainSecurity: whoisInfo,
+      domainSecurity: technicalSecurity,
+      technicalSecurity,
       consumerProtection: scrapedData.consumerProtection,
       checklist,
-      vvtatRulesMatched: {
-        rule1SellerIdentity: mergedLegal.found,
-        rule2PriceHeuristics: true,
-        rule3ReviewsIndication: true,
-        rule4PaymentSafety: whoisInfo.sslValid,
-        rule5Jurisdiction: true,
+      vvtatRulesMatched,
+      recommendations: {
+        verdict: verdictSummary,
+        keyPoints,
+        vvtatAdviceLink: 'https://vvtat.lrv.lt/lt/naujienos-ir-pranesimai-ziniasklaidai-377/fiktyvios-internetines-parduotuves-kaip-atpazinti-ir-neapsigauti-977/',
+        list: recommendationList,
       },
-      recommendations,
     };
   }
 }

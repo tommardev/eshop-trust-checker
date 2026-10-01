@@ -1,4 +1,5 @@
 import blockedCache from '../data/vvtat-blocked-cache.json' with { type: 'json' };
+import { Security } from './security.ts';
 
 export class VvtatChecker {
   private static blockedSet: Set<string> = new Set(
@@ -38,7 +39,7 @@ export class VvtatChecker {
     }
 
     // Tikriname subdomenų atveju (pvz. sub.domain.com)
-    for (const blocked of this.blockedSet) {
+    for (const blocked of Array.from(this.blockedSet)) {
       if (normalized.endsWith('.' + blocked)) {
         return {
           isBlocked: true,
@@ -58,18 +59,21 @@ export class VvtatChecker {
   }
 
   /**
-   * Sinchronizuoja sąrašą tiesiogiai iš VVTAT serverio
+   * Sinchronizuoja sąrašą tiesiogiai iš VVTAT serverio su griežtu timeout ir dydžio limitu
    */
   public static async refreshFromOfficialSource(): Promise<number> {
     try {
-      const response = await fetch('https://vvtat.lrv.lt/public/canonical/1790138878/49228/blokuojami.txt', {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) EShopTrustChecker/1.0' },
-        next: { revalidate: 3600 }
-      });
-      if (!response.ok) return this.blockedSet.size;
+      const result = await Security.safeFetchText(
+        'https://vvtat.lrv.lt/public/canonical/1790138878/49228/blokuojami.txt',
+        { timeoutMs: 4000, maxBytes: 2 * 1024 * 1024 }
+      );
 
-      const text = await response.text();
-      const lines = text.split('\n')
+      if (!result.ok || !result.text) {
+        return this.blockedSet.size;
+      }
+
+      const lines = result.text
+        .split('\n')
         .map(l => l.trim().toLowerCase())
         .filter(l => l && !l.startsWith('#') && l.includes('.'));
 

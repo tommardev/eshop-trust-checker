@@ -1,5 +1,6 @@
 import * as cheerio from 'cheerio';
-import { LegalEntityInfo, ConsumerProtectionInfo } from '../types/audit';
+import type { LegalEntityInfo, ConsumerProtectionInfo } from '../types/audit.ts';
+import { Security } from './security.ts';
 
 export interface ScrapedData {
   legalEntity: Partial<LegalEntityInfo>;
@@ -23,38 +24,33 @@ export class WebScraper {
       hasPrivacyPolicy: false,
       hasContactsPage: false,
       detectedPaymentMethods: [],
+      paymentMethodsDetected: [],
       hasDirectBankTransferOnly: false,
+      suspiciousIndicators: [],
     };
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) EShopTrustChecker/1.0',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        },
-        signal: controller.signal,
+      // Saugus atsisiuntimas su SSRF blokavimu, 4000ms timeout ir 2MB riba
+      const fetchResult = await Security.safeFetchText(url, {
+        timeoutMs: 4000,
+        maxBytes: 2 * 1024 * 1024,
       });
-      clearTimeout(timeoutId);
 
-      if (!response.ok) {
+      if (!fetchResult.ok || !fetchResult.text) {
         return {
-          legalEntity: { found: false },
+          legalEntity: { found: false, companyFound: false, isLithuanianOrEu: false },
           consumerProtection: defaultProtection,
           rawTitle: '',
         };
       }
 
-      const html = await response.text();
+      const html = fetchResult.text;
       const $ = cheerio.load(html);
 
       const title = $('title').text().trim();
       const bodyText = $('body').text().replace(/\s+/g, ' ');
 
       // 1. Įmonės kodo paieška (9 skaitmenys)
-      // Ieškome tekstų: "Įmonės kodas: 123456789", "įm. k. 123456789", "kodas: 123456789"
       let companyCode: string | undefined;
       const codeRegex = /(?:įmonės\s*kodas|įm\.\s*k\.|kodas|company\s*code|reg\.\s*nr\.?)[:\s]+([0-9]{9})\b/i;
       const codeMatch = bodyText.match(codeRegex);
@@ -124,28 +120,53 @@ export class WebScraper {
       if (lowerHtml.includes('mastercard') || lowerHtml.includes('visa')) detectedPayments.push('Kortelės (Visa/Mastercard)');
       if (lowerHtml.includes('pristatymo metu') || lowerHtml.includes('kurjeriui')) detectedPayments.push('Atsiskaitymas atsiimant (COD)');
 
+      const hasDirectBankTransferOnly = detectedPayments.length === 0 && /bankiniu pavedimu|pavedimu į sąskaitą/i.test(bodyText);
+
+      // Įtartini rodikliai
+      const suspiciousIndicators: string[] = [];
+      if (!companyCode && !address) {
+        suspiciousIndicators.push('Nėra nurodytų pardavėjo rekvizitų (įmonės kodo ir buveinės adreso)');
+      }
+      if (hasLegacyPhonePrefix) {
+        suspiciousIndicators.push('Nurodytas pasenęs telefono ryšio prefiksas 8 vietoje naujojo 0 / +370');
+      }
+      if (hasDirectBankTransferOnly) {
+        suspiciousIndicators.push('Siūlomas tik tiesioginis išankstinis bankinis pavedimas be mokėjimo tarpininkų garantijų');
+      }
+      if (!hasReturnPolicy) {
+        suspiciousIndicators.push('Nerasta aiški 14 dienų prekių grąžinimo garantija');
+      }
+
+      const isFound = !!(companyCode || address || phone);
+
       return {
         legalEntity: {
-          found: !!(companyCode || address || phone),
+          found: isFound,
+          companyFound: isFound,
           companyCode,
           vatCode,
+          hasVatCode: !!vatCode,
           email,
           phone,
           hasLegacyPhonePrefix,
           address,
+          physicalAddress: address,
+          isLithuanianOrEu: isFound,
         },
         consumerProtection: {
           hasReturnPolicy,
           hasPrivacyPolicy,
           hasContactsPage,
           detectedPaymentMethods: detectedPayments,
-          hasDirectBankTransferOnly: detectedPayments.length === 0 && /bankiniu pavedimu|pavedimu į sąskaitą/i.test(bodyText),
+          paymentMethodsDetected: detectedPayments,
+          hasDirectBankTransferOnly,
+          suspiciousIndicators,
         },
         rawTitle: title,
       };
     } catch {
       return {
-        legalEntity: { found: false },
+        legalEntity: { found: false, companyFound: false, isLithuanianOrEu: false },
         consumerProtection: defaultProtection,
         rawTitle: '',
       };

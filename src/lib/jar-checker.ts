@@ -1,4 +1,4 @@
-import type { LegalEntityInfo } from '../types/audit';
+import type { LegalEntityInfo } from '../types/audit.ts';
 
 export class JarChecker {
   /**
@@ -7,47 +7,63 @@ export class JarChecker {
   private static knownEntities: Record<string, Partial<LegalEntityInfo>> = {
     'kalykla.lt': {
       found: true,
+      companyFound: true,
       companyCode: '120153835',
       companyName: 'UAB „Lietuvos monetų kalykla“',
       vatCode: 'LT201538314',
+      hasVatCode: true,
       address: 'Eigulių g. 4, LT-03150 Vilnius',
+      physicalAddress: 'Eigulių g. 4, LT-03150 Vilnius',
       email: 'info@kalykla.lt',
       phone: '+370 5 216 2616',
       jarStatus: 'VEIKIANTI',
       isValidCodeFormat: true,
+      isLithuanianOrEu: true,
     },
     'pigu.lt': {
       found: true,
+      companyFound: true,
       companyCode: '300866792',
       companyName: 'UAB „Pigu“',
       vatCode: 'LT100003295815',
+      hasVatCode: true,
       address: 'Laisvės pr. 75, Vilnius',
+      physicalAddress: 'Laisvės pr. 75, Vilnius',
       email: 'pagalba@pigu.lt',
       phone: '+370 661 05555',
       jarStatus: 'VEIKIANTI',
       isValidCodeFormat: true,
+      isLithuanianOrEu: true,
     },
     'senukai.lt': {
       found: true,
+      companyFound: true,
       companyCode: '234376520',
       companyName: 'UAB „Kesko Senukai Digital“',
       vatCode: 'LT343765219',
+      hasVatCode: true,
       address: 'Kareivių g. 11B, Vilnius',
+      physicalAddress: 'Kareivių g. 11B, Vilnius',
       email: 'info@senukai.lt',
       phone: '+370 700 11119',
       jarStatus: 'VEIKIANTI',
       isValidCodeFormat: true,
+      isLithuanianOrEu: true,
     },
     'topocentras.lt': {
       found: true,
+      companyFound: true,
       companyCode: '134777619',
       companyName: 'UAB „Topo grupė“',
       vatCode: 'LT347776113',
+      hasVatCode: true,
       address: 'Savanorių pr. 206A, Kaunas',
+      physicalAddress: 'Savanorių pr. 206A, Kaunas',
       email: 'info@topocentras.lt',
       phone: '+370 700 55800',
       jarStatus: 'VEIKIANTI',
       isValidCodeFormat: true,
+      isLithuanianOrEu: true,
     }
   };
 
@@ -97,6 +113,8 @@ export class JarChecker {
     if (this.knownEntities[normDomain]) {
       return {
         found: true,
+        companyFound: true,
+        isLithuanianOrEu: true,
         ...this.knownEntities[normDomain]
       } as LegalEntityInfo;
     }
@@ -106,16 +124,20 @@ export class JarChecker {
       const isValid = this.validateCompanyCodeFormat(extractedCode);
       return {
         found: true,
+        companyFound: true,
         companyCode: extractedCode,
         isValidCodeFormat: isValid,
-        jarStatus: isValid ? 'VEIKIANTI' : 'NEZINOMA',
+        jarStatus: 'NEZINOMA', // Be tiesioginės JAR API sesijos statusas yra nežinomas, net jei algoritmas tinka
+        isLithuanianOrEu: isValid,
       };
     }
 
     return {
       found: false,
+      companyFound: false,
       isValidCodeFormat: false,
       jarStatus: 'NEZINOMA',
+      isLithuanianOrEu: false,
     };
   }
 }
