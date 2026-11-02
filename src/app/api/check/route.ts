@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AuditEngine } from '@/lib/audit-engine';
+import { Security } from '@/lib/security';
 import { VvtatChecker } from '@/lib/vvtat-checker';
 
 export const dynamic = 'force-dynamic';
@@ -12,6 +13,14 @@ export async function GET(request: NextRequest) {
     if (!query || typeof query !== 'string' || query.trim().length === 0) {
       return NextResponse.json(
         { error: 'Nenurodytas domenas arba el. parduotuvės URL adresas.' },
+        { status: 400 }
+      );
+    }
+
+    const targetCheck = Security.isSafeInputTarget(query);
+    if (!targetCheck.safe) {
+      return NextResponse.json(
+        { error: targetCheck.reason || 'Neteisingas arba blokuojamas domeno adresas (SSRF apsauga).' },
         { status: 400 }
       );
     }
@@ -43,6 +52,14 @@ export async function POST(request: NextRequest) {
     if (!query || typeof query !== 'string' || query.trim().length === 0) {
       return NextResponse.json(
         { error: 'Prašome pateikti el. parduotuvės adresą (pvz., pigu.lt).' },
+        { status: 400 }
+      );
+    }
+
+    const targetCheck = Security.isSafeInputTarget(query);
+    if (!targetCheck.safe) {
+      return NextResponse.json(
+        { error: targetCheck.reason || 'Neteisingas arba blokuojamas domeno adresas (SSRF apsauga).' },
         { status: 400 }
       );
     }

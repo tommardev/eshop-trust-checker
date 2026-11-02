@@ -1,14 +1,13 @@
+import lbCache from '../data/lb-flagged-cache.json' with { type: 'json' };
 import { VvtatChecker } from './vvtat-checker.ts';
 
 export class LbChecker {
   /**
    * Žinomi Lietuvos Banko (LB) įspėjimų sąraše esantys finansinių paslaugų / apgaulingų investicijų domenai
    */
-  private static lbFlaggedDomains: Set<string> = new Set([
-    'crypto-invest.com',
-    'quick-loan-fast.eu',
-    'bank-secure-login.net',
-  ]);
+  private static lbFlaggedDomains: Set<string> = new Set(
+    lbCache.domains.map((d: string) => d.toLowerCase().trim())
+  );
 
   /**
    * Patikrina ar domenas yra Lietuvos banko nepatikimų finansų subjektų sąraše
@@ -33,5 +32,12 @@ export class LbChecker {
     }
 
     return { isFlagged: false };
+  }
+
+  /**
+   * Gauti visus šiuo metu žinomus Lietuvos banko įspėtus domenus
+   */
+  public static getAllFlagged(): string[] {
+    return Array.from(this.lbFlaggedDomains);
   }
 }
