@@ -21,3 +21,4 @@ Thumbs.db
 
 # Installed agent skills (restore with: npx skills experimental_install --yes)
 .agents/skills/
+.claude/skills
