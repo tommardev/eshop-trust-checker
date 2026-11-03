@@ -85,13 +85,13 @@ Run from the **repo root**. Installs land in `.agents/skills/` (gitignored). Com
 **Default sources** (already in `skills-lock.json`). Day-to-day restore is the lockfile. Use `add` when those GitHub repos gained skills this lock does not have yet:
 
 ```bash
-npx skills add vercel-labs/skills --yes --skill find-skills
-npx skills add forrestchang/andrej-karpathy-skills --yes
-npx skills add emilkowalski/skills --yes
-npx skills add leonxlnx/taste-skill --yes --skill design-taste-frontend redesign-existing-projects
-npx skills add mattpocock/skills --yes --skill improve-codebase-architecture research codebase-design
-npx skills add coleam00/skills --yes
-npx skills add addyosmani/agent-skills --yes \
+npx skills@latest add vercel-labs/skills --yes --skill find-skills
+npx skills@latest add forrestchang/andrej-karpathy-skills --yes
+npx skills@latest add emilkowalski/skills --yes
+//Risk Level: CRITICAL //npx skills@latest add leonxlnx/taste-skill --yes --skill design-taste-frontend redesign-existing-projects
+npx skills@latest add mattpocock/skills --yes --skill improve-codebase-architecture research codebase-design
+npx skills@latest add coleam00/skills --yes
+npx skills@latest add addyosmani/agent-skills --yes \
   -s frontend-ui-engineering \
   -s api-and-interface-design \
   -s security-and-hardening \
@@ -106,10 +106,10 @@ npx skills add addyosmani/agent-skills --yes \
   -s shipping-and-launch \
   -s constraint-driven-development \
   -s deprecation-and-migration
-npx skills add addyosmani/agent-skills --yes \
+npx skills@latest add addyosmani/agent-skills --yes \
   -s idea-refine \
   -s code-review-and-quality
-npx skills add addyosmani/web-quality-skills --yes
+npx skills@latest add addyosmani/web-quality-skills --yes
 ```
 
 Subsets, not whole catalogs: Vercel skills is **only** `find-skills`. Taste is **only** `design-taste-frontend` and `redesign-existing-projects`. Matt Pocock is **only those three**. `addyosmani/web-quality-skills` is the whole catalog. Then commit the updated `skills-lock.json`.
