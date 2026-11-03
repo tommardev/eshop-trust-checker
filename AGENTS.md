@@ -44,6 +44,7 @@ AI_CODING_LEARN.md                      Mandatory intros and tutorials
 docs/
   ARCHITECTURE.md                       System architecture & data model spec
   PRD.md                                Product requirements & user journeys
+  AUTOMATION_WORKFLOW.md                Autonomous planning & implementation specs
   VVTAT_CRITERIA_AND_DATA_SOURCES.md    Official sources, rules, & criteria
   agents/                               On-demand helper deep-dives
 src/
