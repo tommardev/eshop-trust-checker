@@ -27,7 +27,7 @@ Committed files (`AGENTS.md`, helpers, `skills-lock.json`, native rules, this ch
 1. Restore skills (they are gitignored; `skills-lock.json` is committed):
 
 ```bash
-npx skills experimental_install --yes
+npx skills@latest experimental_install --yes
 ```
 
 Needs network. From the repo root.
@@ -77,10 +77,10 @@ Run from the **repo root**. Installs land in `.agents/skills/` (gitignored). Com
 
 | What                                                         | Command                                 |
 | ------------------------------------------------------------ | --------------------------------------- |
-| Restore from the lockfile (clone, new machine, wiped folder) | `npx skills experimental_install --yes` |
-| See whether installed skills have updates                    | `npx skills check`                      |
-| Apply updates                                                | `npx skills update --yes`               |
-| List what is installed                                       | `npx skills list`                       |
+| Restore from the lockfile (clone, new machine, wiped folder) | `npx skills@latest experimental_install --yes` |
+| See whether installed skills have updates                    | `npx skills@latest check`                      |
+| Apply updates                                                | `npx skills@latest update --yes`               |
+| List what is installed                                       | `npx skills@latest list`                       |
 
 **Default sources** (already in `skills-lock.json`). Day-to-day restore is the lockfile. Use `add` when those GitHub repos gained skills this lock does not have yet:
 
@@ -114,7 +114,7 @@ npx skills@latest add addyosmani/web-quality-skills --yes
 
 Subsets, not whole catalogs: Vercel skills is **only** `find-skills`. Taste is **only** `design-taste-frontend` and `redesign-existing-projects`. Matt Pocock is **only those three**. `addyosmani/web-quality-skills` is the whole catalog. Then commit the updated `skills-lock.json`.
 
-Browse more: [skills.sh](https://skills.sh/). Search: `npx skills find [query]`.
+Browse more: [skills.sh](https://skills.sh/). Search: `npx skills@latest find [query]`.
 
 ## Cursor plugins (once per machine)
 
@@ -149,7 +149,7 @@ Connect Context7, Sonatype, and Exa in Customize. `"key": true` in settings mean
 ## Do not commit
 
 - Plugin API keys, `.env`, credentials
-- `.agents/skills/` — restore with `npx skills experimental_install --yes`
+- `.agents/skills/` — restore with `npx skills@latest experimental_install --yes`
 
 ## Map
 
