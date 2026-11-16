@@ -85,14 +85,14 @@ export const LegalSummaryCard: React.FC<LegalSummaryCardProps> = ({ legal }) => 
               {legal.companyCode || 'Nenurodytas'}
             </span>
             {legal.companyCode && (
-              legal.isValidCodeFormat ? (
+              legal.isValidCodeFormat !== false ? (
                 <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
-                  <CheckCircle2 className="h-3 w-3" />
+                  <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
                   Formatas galioja (M11)
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">
-                  <AlertCircle className="h-3 w-3" />
+                  <AlertCircle className="h-3 w-3" aria-hidden="true" />
                   Neteisingas kontrolinis skaitmuo
                 </span>
               )

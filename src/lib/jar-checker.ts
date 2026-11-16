@@ -1,4 +1,5 @@
 import jarCache from '../data/jar-entities-cache.json' with { type: 'json' };
+import { VvtatChecker } from './vvtat-checker.ts';
 import type {
   LegalEntityInfo,
   JarCacheEntity,
@@ -7,18 +8,8 @@ import type {
 } from '../types/audit.ts';
 
 export class JarChecker {
-  private static normalizeDomain(domain: unknown): string {
-    if (!domain || typeof domain !== 'string') {
-      return '';
-    }
-    return domain
-      .trim()
-      .toLowerCase()
-      .replace(/^https?:\/\//i, '')
-      .split('/')[0]
-      .split('?')[0]
-      .split('#')[0]
-      .replace(/^www\./, '');
+  private static safeNormalizeDomain(domain: unknown): string {
+    return typeof domain === 'string' ? VvtatChecker.normalizeDomain(domain) : '';
   }
 
   private static cleanCompanyCode(code: unknown): string {
@@ -30,7 +21,7 @@ export class JarChecker {
 
   private static readonly entitiesByDomain: Map<string, JarCacheEntity> = new Map(
     ((jarCache as JarEntitiesCache).entities ?? [])
-      .map((entity) => [JarChecker.normalizeDomain(entity.domain), entity] as const)
+      .map((entity) => [JarChecker.safeNormalizeDomain(entity.domain), entity] as const)
       .filter(([domain]) => domain.length > 0)
   );
 
@@ -41,10 +32,11 @@ export class JarChecker {
   );
 
   private static toLegalEntityInfo(entry: JarCacheEntity): LegalEntityInfo {
+    const companyCode = this.cleanCompanyCode(entry.companyCode);
     return {
       found: true,
       companyFound: true,
-      companyCode: this.cleanCompanyCode(entry.companyCode),
+      companyCode,
       companyName: entry.companyName,
       vatCode: entry.vatCode,
       hasVatCode: Boolean(entry.vatCode),
@@ -53,7 +45,7 @@ export class JarChecker {
       email: entry.email,
       phone: entry.phone,
       jarStatus: this.classifyStatus(entry.jarStatus),
-      isValidCodeFormat: true,
+      isValidCodeFormat: this.validateCompanyCodeFormat(companyCode),
       isLithuanianOrEu: entry.isLithuanianOrEu ?? true,
     };
   }
@@ -97,7 +89,7 @@ export class JarChecker {
   /**
    * Klasifikuoja žalią JAR teisinio statuso eilutę į standartizuotą statusą
    */
-  public static classifyStatus(rawStatus?: string): JarEntityStatus {
+  public static classifyStatus(rawStatus?: unknown): JarEntityStatus {
     if (!rawStatus || typeof rawStatus !== 'string') {
       return 'NEZINOMA';
     }
@@ -113,12 +105,16 @@ export class JarChecker {
     if (s.includes('likvid') || s.includes('liquidat')) {
       return 'LIKVIDUOJAMA';
     }
-    // Tikriname išregistravimo ir neaktyvumo požymius prieš 'registruot' / 'active'
+    // Tikriname išregistravimo ir neaktyvumo / neigimo požymius prieš 'registruot' / 'active' / 'veikian'
     if (
       s.includes('išregistruot') ||
       s.includes('isregistruot') ||
       s.includes('deregister') ||
-      s.includes('inactive')
+      s.includes('inactive') ||
+      s.includes('neveikian') ||
+      s.includes('non-active') ||
+      s.includes('not active') ||
+      s.includes('deactivat')
     ) {
       return 'NEZINOMA';
     }
@@ -157,7 +153,7 @@ export class JarChecker {
    * Tikrina įmonės duomenis pagal domeną arba ištrauktą kodą
    */
   public static lookupEntity(domain: string, extractedCode?: string): LegalEntityInfo {
-    const normDomain = this.normalizeDomain(domain);
+    const normDomain = this.safeNormalizeDomain(domain);
 
     // 1. Jei tai žinomas subjektas pagal domeną iš JAR talpyklos
     if (normDomain) {

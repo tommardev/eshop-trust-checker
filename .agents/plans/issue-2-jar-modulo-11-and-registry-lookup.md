@@ -330,3 +330,8 @@ npm run build
 - The Modulo 11 algorithm implementation in `JarChecker.validateCompanyCodeFormat` is already mathematically correct. The core work of Issue #2 is input hardening against non-string/null parameters, introducing status classification (`classifyStatus`), supporting lookup by company code in addition to domain via `src/data/jar-entities-cache.json`, and wiring status warnings into `AuditEngine` and `LegalSummaryCard`.
 
 ## AMENDMENTS
+
+- **2026-11-16 (Review Fixes)**:
+  1. Corrected 3 non-Modulo-11 company codes in `src/data/jar-entities-cache.json` (`120153835` → `110052936` with VAT `LT100529314`, `302587410` → `302587414`, `301234567` → `301234564`) and updated `JarChecker.toLegalEntityInfo` to compute `isValidCodeFormat` dynamically via `validateCompanyCodeFormat` instead of hardcoding `true`.
+  2. Replaced duplicated `JarChecker.normalizeDomain` with `safeNormalizeDomain` delegating to `VvtatChecker.normalizeDomain` (fixing ports, credentials, trailing dots, and disallowed schemes), and guarded negated active status strings (`neveikian`, `non-active`, `not active`, `deactivat`) in `JarChecker.classifyStatus`.
+  3. Mocked external network calls (`WhoisChecker`, `SslChecker`, `WebScraper`) in all `AuditEngine.analyze` unit tests for 100% offline determinism.

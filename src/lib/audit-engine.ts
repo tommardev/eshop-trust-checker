@@ -322,7 +322,7 @@ export class AuditEngine {
         category: 'LEGAL',
         title: 'Pasenęs ryšio numerio formatas (prefiksas 8)',
         status: 'WARN',
-        description: `Svetainėje nurodytas telefono numeris (${mergedLegal.phone}) naudoja nebegaliojantį prefiksą „8“ vietoje naujojo standarto „0“ arba „+370“. Tai rodo, kad kontaktiniai duomenys ilgą laiką neatnaujinti ir svetainė gali būti apleista.`,
+        description: `Svetainėje nurodytas telefono numeris (${scrapedData.legalEntity.phone || mergedLegal.phone}) naudoja nebegaliojantį prefiksą „8“ vietoje naujojo standarto „0“ arba „+370“. Tai rodo, kad kontaktiniai duomenys ilgą laiką neatnaujinti ir svetainė gali būti apleista.`,
         sourceReference: 'Ryšių reguliavimo tarnybos (RRT) nacionalinis numeracijos planas',
         sourceUrl: 'https://www.rrt.lt/',
       });

@@ -3,11 +3,11 @@
   "source": "https://data.gov.lt/datasets/1545/ (Registrų Centras JAR atvirieji duomenys)",
   "entities": [
     {
-      "companyCode": "120153835",
+      "companyCode": "110052936",
       "domain": "kalykla.lt",
       "companyName": "UAB „Lietuvos monetų kalykla“",
       "jarStatus": "VEIKIANTI",
-      "vatCode": "LT201538314",
+      "vatCode": "LT100529314",
       "address": "Eigulių g. 4, LT-03150 Vilnius",
       "email": "info@kalykla.lt",
       "phone": "+370 5 216 2616",
@@ -56,7 +56,7 @@
       "isLithuanianOrEu": true
     },
     {
-      "companyCode": "302587410",
+      "companyCode": "302587414",
       "domain": "likviduojama-shop.lt",
       "companyName": "UAB „Likviduojama Prekyba“",
       "jarStatus": "LIKVIDUOJAMA",
@@ -64,7 +64,7 @@
       "isLithuanianOrEu": true
     },
     {
-      "companyCode": "301234567",
+      "companyCode": "301234564",
       "domain": "bankrutuojanti-shop.lt",
       "companyName": "UAB „Bankrutuojanti E-Parduotuvė“",
       "jarStatus": "BANKRUTUOJANTI",
