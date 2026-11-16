@@ -20,6 +20,12 @@ describe('VvtatChecker.normalizeDomain', () => {
       assert.strictEqual(VvtatChecker.normalizeDomain('HTTPS://EXAMPLE.LT'), 'example.lt');
       assert.strictEqual(VvtatChecker.normalizeDomain('Http://Shop.Lt'), 'shop.lt');
     });
+
+    it('should reject disallowed non-HTTP(S) protocols by returning empty string', () => {
+      assert.strictEqual(VvtatChecker.normalizeDomain('ftp://example.lt'), '');
+      assert.strictEqual(VvtatChecker.normalizeDomain('file:///etc/passwd'), '');
+      assert.strictEqual(VvtatChecker.normalizeDomain('javascript:alert(1)'), '');
+    });
   });
 
   describe('prefix handling', () => {
@@ -88,6 +94,11 @@ describe('VvtatChecker.normalizeDomain', () => {
     it('should return already clean domains unmodified', () => {
       assert.strictEqual(VvtatChecker.normalizeDomain('senukai.lt'), 'senukai.lt');
       assert.strictEqual(VvtatChecker.normalizeDomain('topocentras.lt'), 'topocentras.lt');
+    });
+
+    it('should strip trailing dots and handle bracketed IPv6 literals', () => {
+      assert.strictEqual(VvtatChecker.normalizeDomain('pigu.lt.'), 'pigu.lt');
+      assert.strictEqual(VvtatChecker.normalizeDomain('http://[::1]:8080/test'), '::1');
     });
   });
 });
@@ -218,8 +229,18 @@ describe('Security.isPrivateOrBlockedIp (SSRF Protection)', () => {
     assert.strictEqual(Security.isPrivateOrBlockedIp('192.168.1.1'), true);
   });
 
-  it('should identify cloud metadata addresses as blocked', () => {
+  it('should identify cloud metadata and link-local addresses as blocked', () => {
     assert.strictEqual(Security.isPrivateOrBlockedIp('169.254.169.254'), true);
+  });
+
+  it('should identify IPv4-mapped IPv6, CGNAT, and IPv6 link-local/unique-local addresses as blocked', () => {
+    assert.strictEqual(Security.isPrivateOrBlockedIp('::ffff:127.0.0.1'), true);
+    assert.strictEqual(Security.isPrivateOrBlockedIp('::ffff:10.0.0.1'), true);
+    assert.strictEqual(Security.isPrivateOrBlockedIp('::ffff:192.168.1.1'), true);
+    assert.strictEqual(Security.isPrivateOrBlockedIp('100.64.0.1'), true);
+    assert.strictEqual(Security.isPrivateOrBlockedIp('fe80::1'), true);
+    assert.strictEqual(Security.isPrivateOrBlockedIp('fc00::1'), true);
+    assert.strictEqual(Security.isPrivateOrBlockedIp('fd00::1'), true);
   });
 
   it('should allow legitimate public IP addresses', () => {
@@ -229,10 +250,52 @@ describe('Security.isPrivateOrBlockedIp (SSRF Protection)', () => {
   });
 });
 
+describe('Security.isSafeInputTarget & Security.validateInputTarget', () => {
+  it('should reject disallowed protocols', () => {
+    assert.strictEqual(Security.isSafeInputTarget('ftp://example.lt').safe, false);
+    assert.strictEqual(Security.isSafeInputTarget('file:///etc/passwd').safe, false);
+    assert.strictEqual(Security.isSafeInputTarget('javascript:alert(1)').safe, false);
+    assert.strictEqual(Security.validateInputTarget('ftp://example.lt').safe, false);
+  });
+
+  it('should reject localhost, private IPs, metadata endpoints, and IPv6 loopback', () => {
+    const blockedTargets = [
+      'localhost',
+      'http://127.0.0.1:8080/admin',
+      'https://10.0.0.1',
+      'http://172.16.0.5',
+      'http://192.168.1.1',
+      'http://169.254.169.254/latest/meta-data/',
+      '[::1]',
+      'sub.localhost',
+    ];
+
+    for (const target of blockedTargets) {
+      assert.strictEqual(Security.isSafeInputTarget(target).safe, false, `Expected ${target} to be rejected by isSafeInputTarget`);
+      assert.strictEqual(Security.validateInputTarget(target).safe, false, `Expected ${target} to be rejected by validateInputTarget`);
+    }
+  });
+
+  it('should accept valid public domains', () => {
+    assert.strictEqual(Security.isSafeInputTarget('https://www.pigu.lt').safe, true);
+    assert.strictEqual(Security.validateInputTarget('https://www.pigu.lt').safe, true);
+    assert.strictEqual(Security.isSafeInputTarget('senukai.lt').safe, true);
+  });
+});
+
 describe('LbChecker.isFlagged', () => {
-  it('should flag known fraudulent/unlicensed financial domains', () => {
+  it('should flag known fraudulent/unlicensed financial domains and subdomains', () => {
     assert.strictEqual(LbChecker.isFlagged('crypto-invest.com').isFlagged, true);
     assert.strictEqual(LbChecker.isFlagged('https://quick-loan-fast.eu/login').isFlagged, true);
+    assert.strictEqual(LbChecker.isFlagged('fx-profit-lt.com').isFlagged, true);
+    assert.strictEqual(LbChecker.isFlagged('sub.crypto-invest.com').isFlagged, true);
+  });
+
+  it('should expose all flagged domains via getAllFlagged()', () => {
+    const allFlagged = LbChecker.getAllFlagged();
+    assert.ok(Array.isArray(allFlagged));
+    assert.ok(allFlagged.includes('crypto-invest.com'));
+    assert.ok(allFlagged.includes('fx-profit-lt.com'));
   });
 
   it('should not flag standard trusted e-shops', () => {

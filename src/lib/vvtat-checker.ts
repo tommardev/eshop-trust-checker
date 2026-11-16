@@ -11,17 +11,43 @@ export class VvtatChecker {
    */
   public static normalizeDomain(input: string): string {
     let cleaned = input.trim().toLowerCase();
-    
-    // Pašaliname protokolą
+    if (!cleaned) {
+      return '';
+    }
+
+    // Atmesti neleistinus URI protokolus (pvz. ftp://, file://, javascript:, data:)
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(cleaned) && !/^https?:\/\//i.test(cleaned)) {
+      return '';
+    }
+    if (/^(javascript|data|file|ftp|mailto|ws|wss|vbscript|about|blob|tel):/i.test(cleaned)) {
+      return '';
+    }
+
+    // Pašaliname http:// arba https:// protokolą
     cleaned = cleaned.replace(/^https?:\/\//i, '');
-    // Pašaliname vartotojo autentifikacijos dalį
-    cleaned = cleaned.replace(/^.*@/, '');
-    // Pašaliname kelią ir parametrus
-    cleaned = cleaned.split('/')[0].split('?')[0].split('#')[0].split(':')[0];
+    // Pašaliname vartotojo autentifikacijos dalį (user:pass@) prieš kelią
+    cleaned = cleaned.replace(/^[^/?#]*@/, '');
+    // Pašaliname kelią, užklausos parametrus ir fragmentą
+    cleaned = cleaned.split('/')[0].split('?')[0].split('#')[0];
+
+    // Apdorojame IPv6 su laužtiniais skliaustais (pvz. [::1]:8080 -> ::1) arba host:port
+    if (cleaned.startsWith('[')) {
+      const closeBracket = cleaned.indexOf(']');
+      if (closeBracket !== -1) {
+        cleaned = cleaned.substring(1, closeBracket);
+      }
+    } else if (cleaned.indexOf(':') !== -1 && cleaned.indexOf(':') === cleaned.lastIndexOf(':')) {
+      cleaned = cleaned.split(':')[0];
+    }
+
     // Pašaliname pradinį 'www.'
     if (cleaned.startsWith('www.')) {
       cleaned = cleaned.substring(4);
     }
+
+    // Pašaliname galinius taškus (pvz. pigu.lt. -> pigu.lt)
+    cleaned = cleaned.replace(/\.+$/, '');
+
     return cleaned;
   }
 

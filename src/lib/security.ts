@@ -1,5 +1,6 @@
 import dns from 'node:dns/promises';
 import net from 'node:net';
+import { VvtatChecker } from './vvtat-checker.ts';
 
 export class Security {
   public static readonly MAX_PAYLOAD_BYTES = 2 * 1024 * 1024; // 2 MB
@@ -9,24 +10,33 @@ export class Security {
    * Patikrina ar IP adresas yra privatus, ciklinis (loopback) arba debesijos metaduomenų adresas
    */
   public static isPrivateOrBlockedIp(ip: string): boolean {
+    const cleanIp = ip.trim().toLowerCase().replace(/^\[|\]$/g, '');
+
     // IPv6 patikra
-    if (net.isIPv6(ip)) {
-      const lower = ip.toLowerCase();
-      if (lower === '::1' || lower === '::' || lower.startsWith('fe80:') || lower.startsWith('fc') || lower.startsWith('fd')) {
+    if (net.isIPv6(cleanIp)) {
+      if (
+        cleanIp === '::1' ||
+        cleanIp === '::' ||
+        /^0+:0+:0+:0+:0+:0+:0+:[01]$/.test(cleanIp) ||
+        cleanIp.startsWith('fe80:') ||
+        /^fe[89ab][0-9a-f]:/.test(cleanIp) ||
+        cleanIp.startsWith('fc') ||
+        cleanIp.startsWith('fd')
+      ) {
         return true;
       }
       // IPv4-mapped IPv6
-      if (lower.startsWith('::ffff:')) {
-        return this.isPrivateOrBlockedIp(lower.substring(7));
+      if (cleanIp.startsWith('::ffff:')) {
+        return this.isPrivateOrBlockedIp(cleanIp.substring(7));
       }
       return false;
     }
 
-    if (!net.isIPv4(ip)) {
+    if (!net.isIPv4(cleanIp)) {
       return true; // Nežinomas arba neteisingas IP formatas
     }
 
-    const parts = ip.split('.').map(Number);
+    const parts = cleanIp.split('.').map(Number);
     if (parts.length !== 4 || parts.some(p => isNaN(p) || p < 0 || p > 255)) {
       return true;
     }
@@ -61,6 +71,58 @@ export class Security {
     if (a >= 240) return true;
 
     return false;
+  }
+
+  /**
+   * Sinchroniškai patikrina vartotojo įvestą URL arba domeną prieš DNS užklausas (SSRF apsauga)
+   */
+  public static isSafeInputTarget(rawInput: string): { safe: boolean; reason?: string } {
+    if (!rawInput || !rawInput.trim()) {
+      return { safe: false, reason: 'Nenurodytas domenas arba URL adresas.' };
+    }
+
+    const trimmed = rawInput.trim();
+
+    if (
+      (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) && !/^https?:\/\//i.test(trimmed)) ||
+      /^(javascript|data|file|ftp|mailto|ws|wss|vbscript|about|blob|tel):/i.test(trimmed)
+    ) {
+      return { safe: false, reason: 'Neleistinas URL protokolas (SSRF apsauga).' };
+    }
+
+    const host = VvtatChecker.normalizeDomain(trimmed);
+    if (!host) {
+      return { safe: false, reason: 'Neteisingas domeno arba URL formatas.' };
+    }
+
+    if (
+      host === 'localhost' ||
+      host.endsWith('.localhost') ||
+      host.endsWith('.local') ||
+      host.endsWith('.internal')
+    ) {
+      return { safe: false, reason: 'Prieiga prie vietinių ar vidinių tinklo resursų draudžiama (SSRF apsauga).' };
+    }
+
+    if (net.isIP(host) !== 0) {
+      if (this.isPrivateOrBlockedIp(host)) {
+        return { safe: false, reason: 'Prieiga prie privačių ar rezervuotų IP adresų draudžiama (SSRF apsauga).' };
+      }
+      return { safe: true };
+    }
+
+    if (/^\d+(\.\d+)*$/.test(host) || /^0x[0-9a-f]+$/i.test(host)) {
+      return { safe: false, reason: 'Prieiga prie privačių ar rezervuotų IP adresų draudžiama (SSRF apsauga).' };
+    }
+
+    return { safe: true };
+  }
+
+  /**
+   * Sinchroniškos SSRF įvesties patikros sinonimas
+   */
+  public static validateInputTarget(rawInput: string): { safe: boolean; reason?: string } {
+    return this.isSafeInputTarget(rawInput);
   }
 
   /**
