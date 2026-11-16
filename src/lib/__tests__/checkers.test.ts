@@ -1,10 +1,13 @@
-import { describe, it } from 'node:test';
+import { describe, it, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { VvtatChecker } from '../vvtat-checker.ts';
 import { JarChecker } from '../jar-checker.ts';
 import { Security } from '../security.ts';
 import { LbChecker } from '../lb-checker.ts';
 import { AuditEngine } from '../audit-engine.ts';
+import { WhoisChecker } from '../whois-checker.ts';
+import { SslChecker } from '../ssl-checker.ts';
+import { WebScraper } from '../scraper.ts';
 
 describe('VvtatChecker.normalizeDomain', () => {
   describe('protocol stripping', () => {
@@ -213,6 +216,188 @@ describe('JarChecker.validateCompanyCodeFormat', () => {
       assert.strictEqual(JarChecker.validateCompanyCodeFormat('LT-INVALID'), false);
     });
   });
+
+  describe('defensive non-string and malformed input handling', () => {
+    it('should return false without throwing for null, undefined, numbers, objects, booleans, NaN, and symbols', () => {
+      const invalidInputs: unknown[] = [
+        null,
+        undefined,
+        123456789,
+        300866792,
+        {},
+        true,
+        false,
+        NaN,
+        Symbol('123456789'),
+      ];
+
+      for (const input of invalidInputs) {
+        assert.doesNotThrow(() => {
+          assert.strictEqual(
+            JarChecker.validateCompanyCodeFormat(input),
+            false,
+            `Expected ${String(input)} to return false`,
+          );
+        });
+      }
+    });
+  });
+});
+
+describe('JarChecker.classifyStatus', () => {
+  it('should classify active status strings as VEIKIANTI', () => {
+    assert.strictEqual(JarChecker.classifyStatus('Veikianti'), 'VEIKIANTI');
+    assert.strictEqual(JarChecker.classifyStatus('Teisinis statusas neįregistruotas'), 'VEIKIANTI');
+  });
+
+  it('should classify bankruptcy status strings as BANKRUTUOJANTI', () => {
+    assert.strictEqual(JarChecker.classifyStatus('Bankrutuojanti'), 'BANKRUTUOJANTI');
+    assert.strictEqual(JarChecker.classifyStatus('Bankrutavo'), 'BANKRUTUOJANTI');
+  });
+
+  it('should classify liquidation status strings as LIKVIDUOJAMA', () => {
+    assert.strictEqual(JarChecker.classifyStatus('Likviduojama'), 'LIKVIDUOJAMA');
+    assert.strictEqual(JarChecker.classifyStatus('Likviduojamas'), 'LIKVIDUOJAMA');
+  });
+
+  it('should classify deregistered, empty, undefined, and unknown strings as NEZINOMA', () => {
+    assert.strictEqual(JarChecker.classifyStatus('Išregistruota'), 'NEZINOMA');
+    assert.strictEqual(JarChecker.classifyStatus(''), 'NEZINOMA');
+    assert.strictEqual(JarChecker.classifyStatus('   '), 'NEZINOMA');
+    assert.strictEqual(JarChecker.classifyStatus(undefined), 'NEZINOMA');
+    assert.strictEqual(JarChecker.classifyStatus('Nežinomas statusas'), 'NEZINOMA');
+  });
+});
+
+describe('JarChecker.lookupByCode', () => {
+  it('should resolve full LegalEntityInfo for active, bankrupt, and liquidated codes', () => {
+    const active = JarChecker.lookupByCode('120153835');
+    assert.ok(active);
+    assert.strictEqual(active.found, true);
+    assert.strictEqual(active.companyFound, true);
+    assert.strictEqual(active.companyCode, '120153835');
+    assert.strictEqual(active.companyName, 'UAB „Lietuvos monetų kalykla“');
+    assert.strictEqual(active.vatCode, 'LT201538314');
+    assert.strictEqual(active.hasVatCode, true);
+    assert.strictEqual(active.address, 'Eigulių g. 4, LT-03150 Vilnius');
+    assert.strictEqual(active.email, 'info@kalykla.lt');
+    assert.strictEqual(active.phone, '+370 5 216 2616');
+    assert.strictEqual(active.jarStatus, 'VEIKIANTI');
+    assert.strictEqual(active.isValidCodeFormat, true);
+    assert.strictEqual(active.isLithuanianOrEu, true);
+
+    const bankrupt = JarChecker.lookupByCode('301234567');
+    assert.ok(bankrupt);
+    assert.strictEqual(bankrupt.found, true);
+    assert.strictEqual(bankrupt.companyFound, true);
+    assert.strictEqual(bankrupt.companyCode, '301234567');
+    assert.strictEqual(bankrupt.companyName, 'UAB „Bankrutuojanti E-Parduotuvė“');
+    assert.strictEqual(bankrupt.address, 'Kauno g. 2, Kaunas');
+    assert.strictEqual(bankrupt.jarStatus, 'BANKRUTUOJANTI');
+    assert.strictEqual(bankrupt.isValidCodeFormat, true);
+    assert.strictEqual(bankrupt.isLithuanianOrEu, true);
+
+    const liquidated = JarChecker.lookupByCode('302587410');
+    assert.ok(liquidated);
+    assert.strictEqual(liquidated.found, true);
+    assert.strictEqual(liquidated.companyFound, true);
+    assert.strictEqual(liquidated.companyCode, '302587410');
+    assert.strictEqual(liquidated.companyName, 'UAB „Likviduojama Prekyba“');
+    assert.strictEqual(liquidated.address, 'Vilniaus g. 1, Vilnius');
+    assert.strictEqual(liquidated.jarStatus, 'LIKVIDUOJAMA');
+    assert.strictEqual(liquidated.isValidCodeFormat, true);
+    assert.strictEqual(liquidated.isLithuanianOrEu, true);
+  });
+
+  it('should support formatted code strings with prefixes and whitespace', () => {
+    const bankrupt = JarChecker.lookupByCode('LT-301234567');
+    assert.ok(bankrupt);
+    assert.strictEqual(bankrupt.companyCode, '301234567');
+    assert.strictEqual(bankrupt.jarStatus, 'BANKRUTUOJANTI');
+
+    const liquidated = JarChecker.lookupByCode(' 302 587 410 ');
+    assert.ok(liquidated);
+    assert.strictEqual(liquidated.companyCode, '302587410');
+    assert.strictEqual(liquidated.jarStatus, 'LIKVIDUOJAMA');
+  });
+
+  it('should return null for unregistered, wrong-length, or non-string inputs', () => {
+    assert.strictEqual(JarChecker.lookupByCode('999999999'), null);
+    assert.strictEqual(JarChecker.lookupByCode('12345'), null);
+    assert.strictEqual(JarChecker.lookupByCode('1201538350'), null);
+    assert.strictEqual(JarChecker.lookupByCode(''), null);
+    assert.strictEqual(JarChecker.lookupByCode(null), null);
+    assert.strictEqual(JarChecker.lookupByCode(undefined), null);
+    assert.strictEqual(JarChecker.lookupByCode(120153835), null);
+  });
+});
+
+describe('JarChecker.lookupEntity', () => {
+  it('should resolve known domains from the JAR registry cache', () => {
+    const kalykla = JarChecker.lookupEntity('kalykla.lt');
+    assert.strictEqual(kalykla.found, true);
+    assert.strictEqual(kalykla.companyCode, '120153835');
+    assert.strictEqual(kalykla.jarStatus, 'VEIKIANTI');
+
+    const maxima = JarChecker.lookupEntity('https://www.maxima.lt/akcijos');
+    assert.strictEqual(maxima.found, true);
+    assert.strictEqual(maxima.companyCode, '123033512');
+    assert.strictEqual(maxima.companyName, 'MAXIMA LT, UAB');
+    assert.strictEqual(maxima.jarStatus, 'VEIKIANTI');
+
+    const liquidated = JarChecker.lookupEntity('likviduojama-shop.lt');
+    assert.strictEqual(liquidated.found, true);
+    assert.strictEqual(liquidated.companyCode, '302587410');
+    assert.strictEqual(liquidated.jarStatus, 'LIKVIDUOJAMA');
+
+    const bankrupt = JarChecker.lookupEntity('bankrutuojanti-shop.lt');
+    assert.strictEqual(bankrupt.found, true);
+    assert.strictEqual(bankrupt.companyCode, '301234567');
+    assert.strictEqual(bankrupt.jarStatus, 'BANKRUTUOJANTI');
+  });
+
+  it('should resolve entity by extracted code when domain is unknown or generic', () => {
+    const bankrupt = JarChecker.lookupEntity('unknown-eshop.lt', '301234567');
+    assert.strictEqual(bankrupt.found, true);
+    assert.strictEqual(bankrupt.companyFound, true);
+    assert.strictEqual(bankrupt.companyCode, '301234567');
+    assert.strictEqual(bankrupt.companyName, 'UAB „Bankrutuojanti E-Parduotuvė“');
+    assert.strictEqual(bankrupt.jarStatus, 'BANKRUTUOJANTI');
+    assert.strictEqual(bankrupt.isValidCodeFormat, true);
+
+    const liquidated = JarChecker.lookupEntity('unknown-eshop.lt', '302587410');
+    assert.strictEqual(liquidated.found, true);
+    assert.strictEqual(liquidated.companyFound, true);
+    assert.strictEqual(liquidated.companyCode, '302587410');
+    assert.strictEqual(liquidated.companyName, 'UAB „Likviduojama Prekyba“');
+    assert.strictEqual(liquidated.jarStatus, 'LIKVIDUOJAMA');
+    assert.strictEqual(liquidated.isValidCodeFormat, true);
+
+    const active = JarChecker.lookupEntity('unknown-eshop.lt', '120153835');
+    assert.strictEqual(active.found, true);
+    assert.strictEqual(active.companyFound, true);
+    assert.strictEqual(active.companyCode, '120153835');
+    assert.strictEqual(active.companyName, 'UAB „Lietuvos monetų kalykla“');
+    assert.strictEqual(active.jarStatus, 'VEIKIANTI');
+    assert.strictEqual(active.isValidCodeFormat, true);
+  });
+
+  it('should accept valid Modulo 11 code not in registry with NEZINOMA status', () => {
+    const result = JarChecker.lookupEntity('unknown-eshop.lt', '200000017');
+    assert.strictEqual(result.found, true);
+    assert.strictEqual(result.companyFound, true);
+    assert.strictEqual(result.companyCode, '200000017');
+    assert.strictEqual(result.isValidCodeFormat, true);
+    assert.strictEqual(result.jarStatus, 'NEZINOMA');
+  });
+
+  it('should reject unknown domain with invalid check digit code', () => {
+    const result = JarChecker.lookupEntity('unknown-eshop.lt', '300866790');
+    assert.strictEqual(result.found, false);
+    assert.strictEqual(result.companyFound, false);
+    assert.strictEqual(result.isValidCodeFormat, false);
+    assert.strictEqual(result.jarStatus, 'NEZINOMA');
+  });
 });
 
 describe('Security.isPrivateOrBlockedIp (SSRF Protection)', () => {
@@ -347,5 +532,156 @@ describe('AuditEngine.analyze', () => {
     assert.strictEqual(result.legalEntity.found, true);
     assert.strictEqual(result.legalEntity.isValidCodeFormat, true);
     assert.strictEqual(result.blacklist.isVvtatBlocked, false);
+  });
+
+  function mockCleanExternalChecks(t: TestContext, scrapedCompanyCode?: string) {
+    t.mock.method(WhoisChecker, 'checkDomain', async (domain: string) => ({
+      domain,
+      isHttps: true,
+      hasValidSsl: true,
+      sslValid: true,
+      registrationDate: '2018-01-01T00:00:00Z',
+      domainCreatedDate: '2018-01-01T00:00:00Z',
+      domainAgeDays: 2500,
+      domainAgeMonths: 83,
+      isNewDomain: false,
+    }));
+
+    t.mock.method(SslChecker, 'checkCertificate', async () => ({
+      hasValidSsl: true,
+      sslValid: true,
+      issuer: 'Test CA',
+      validTo: '2027-01-01T00:00:00.000Z',
+      isExpired: false,
+      daysRemaining: 365,
+      protocol: 'TLSv1.3',
+      authorized: true,
+    }));
+
+    t.mock.method(WebScraper, 'analyzeWebsite', async () => ({
+      legalEntity: {
+        found: Boolean(scrapedCompanyCode),
+        companyFound: Boolean(scrapedCompanyCode),
+        companyCode: scrapedCompanyCode,
+        isLithuanianOrEu: Boolean(scrapedCompanyCode),
+      },
+      consumerProtection: {
+        hasReturnPolicy: true,
+        hasPrivacyPolicy: true,
+        hasContactsPage: true,
+        detectedPaymentMethods: ['Paysera'],
+        paymentMethodsDetected: ['Paysera'],
+        hasDirectBankTransferOnly: false,
+        suspiciousIndicators: [],
+      },
+      rawTitle: 'Test E-Shop',
+    }));
+  }
+
+  it('should score active VEIKIANTI entity as 100 with PASS legal-status checklist item (mocked network)', async (t) => {
+    mockCleanExternalChecks(t);
+
+    const result = await AuditEngine.analyze('kalykla.lt');
+    assert.strictEqual(result.legalEntity.jarStatus, 'VEIKIANTI');
+    assert.strictEqual(result.trustScore, 100);
+    assert.strictEqual(result.trustLevel, 'SAFE');
+
+    const legalStatusCheck = result.checklist.find((item) => item.id === 'legal-status');
+    assert.ok(legalStatusCheck);
+    assert.strictEqual(legalStatusCheck.status, 'PASS');
+  });
+
+  it('should deduct exactly 40 points and flag BANKRUTUOJANTI entity as FAIL (mocked network)', async (t) => {
+    mockCleanExternalChecks(t);
+
+    const result = await AuditEngine.analyze('bankrutuojanti-shop.lt');
+    assert.strictEqual(result.legalEntity.jarStatus, 'BANKRUTUOJANTI');
+    assert.strictEqual(result.trustScore, 60);
+    assert.strictEqual(result.trustLevel, 'CAUTION');
+
+    const legalStatusCheck = result.checklist.find((item) => item.id === 'legal-status');
+    assert.ok(legalStatusCheck);
+    assert.strictEqual(legalStatusCheck.status, 'FAIL');
+    assert.strictEqual(legalStatusCheck.title, 'JAR Teisinis statusas: Bankrutuojanti įmonė');
+
+    const dangerPoint = result.recommendations.keyPoints.find(
+      (kp) => kp.type === 'danger' && kp.title === 'Įmonė bankrutuoja',
+    );
+    assert.ok(dangerPoint);
+  });
+
+  it('should deduct exactly 25 points and flag LIKVIDUOJAMA entity as WARN (mocked network)', async (t) => {
+    mockCleanExternalChecks(t);
+
+    const result = await AuditEngine.analyze('likviduojama-shop.lt');
+    assert.strictEqual(result.legalEntity.jarStatus, 'LIKVIDUOJAMA');
+    assert.strictEqual(result.trustScore, 75);
+    assert.strictEqual(result.trustLevel, 'CAUTION');
+
+    const legalStatusCheck = result.checklist.find((item) => item.id === 'legal-status');
+    assert.ok(legalStatusCheck);
+    assert.strictEqual(legalStatusCheck.status, 'WARN');
+    assert.strictEqual(legalStatusCheck.title, 'JAR Teisinis statusas: Likviduojama įmonė');
+
+    const warningPoint = result.recommendations.keyPoints.find(
+      (kp) => kp.type === 'warning' && kp.title === 'Įmonė likviduojama',
+    );
+    assert.ok(warningPoint);
+  });
+
+  it('should resolve unknown domain returning scraped companyCode 301234567 as BANKRUTUOJANTI via code lookup (mocked network)', async (t) => {
+    mockCleanExternalChecks(t, '301234567');
+
+    const result = await AuditEngine.analyze('unknown-eshop.lt');
+    assert.strictEqual(result.legalEntity.found, true);
+    assert.strictEqual(result.legalEntity.companyCode, '301234567');
+    assert.strictEqual(result.legalEntity.companyName, 'UAB „Bankrutuojanti E-Parduotuvė“');
+    assert.strictEqual(result.legalEntity.jarStatus, 'BANKRUTUOJANTI');
+    assert.strictEqual(result.trustScore, 60);
+
+    const legalStatusCheck = result.checklist.find((item) => item.id === 'legal-status');
+    assert.ok(legalStatusCheck);
+    assert.strictEqual(legalStatusCheck.status, 'FAIL');
+
+    const dangerPoint = result.recommendations.keyPoints.find(
+      (kp) => kp.type === 'danger' && kp.title === 'Įmonė bankrutuoja',
+    );
+    assert.ok(dangerPoint);
+  });
+
+  it('should directly flag bankrutuojanti-shop.lt as BANKRUTUOJANTI with FAIL status and <= 60 score', async () => {
+    const result = await AuditEngine.analyze('bankrutuojanti-shop.lt');
+    assert.strictEqual(result.legalEntity.found, true);
+    assert.strictEqual(result.legalEntity.companyCode, '301234567');
+    assert.strictEqual(result.legalEntity.jarStatus, 'BANKRUTUOJANTI');
+    assert.ok(result.trustScore <= 60, `Expected score <= 60, got ${result.trustScore}`);
+    assert.notStrictEqual(result.trustLevel, 'SAFE');
+
+    const legalStatusCheck = result.checklist.find((item) => item.id === 'legal-status');
+    assert.ok(legalStatusCheck);
+    assert.strictEqual(legalStatusCheck.status, 'FAIL');
+
+    const dangerPoint = result.recommendations.keyPoints.find(
+      (kp) => kp.type === 'danger' && kp.title === 'Įmonė bankrutuoja',
+    );
+    assert.ok(dangerPoint);
+  });
+
+  it('should directly flag likviduojama-shop.lt as LIKVIDUOJAMA with WARN status and <= 75 score', async () => {
+    const result = await AuditEngine.analyze('likviduojama-shop.lt');
+    assert.strictEqual(result.legalEntity.found, true);
+    assert.strictEqual(result.legalEntity.companyCode, '302587410');
+    assert.strictEqual(result.legalEntity.jarStatus, 'LIKVIDUOJAMA');
+    assert.ok(result.trustScore <= 75, `Expected score <= 75, got ${result.trustScore}`);
+    assert.notStrictEqual(result.trustLevel, 'SAFE');
+
+    const legalStatusCheck = result.checklist.find((item) => item.id === 'legal-status');
+    assert.ok(legalStatusCheck);
+    assert.strictEqual(legalStatusCheck.status, 'WARN');
+
+    const warningPoint = result.recommendations.keyPoints.find(
+      (kp) => kp.type === 'warning' && kp.title === 'Įmonė likviduojama',
+    );
+    assert.ok(warningPoint);
   });
 });

@@ -1,12 +1,53 @@
 import React from 'react';
-import { Building2, MapPin, Mail, Phone, CheckCircle2, AlertCircle, XCircle } from 'lucide-react';
-import { LegalEntityInfo } from '@/types/audit';
+import {
+  Building2,
+  MapPin,
+  Mail,
+  Phone,
+  CheckCircle2,
+  AlertCircle,
+  AlertTriangle,
+  XCircle,
+  Info,
+  type LucideIcon,
+} from 'lucide-react';
+import { JarEntityStatus, LegalEntityInfo } from '@/types/audit';
 
 interface LegalSummaryCardProps {
   legal: LegalEntityInfo;
 }
 
+const JAR_STATUS_CONFIG: Record<
+  JarEntityStatus,
+  { label: string; badgeClass: string; Icon: LucideIcon }
+> = {
+  VEIKIANTI: {
+    label: 'Veikiantis juridinis asmuo',
+    badgeClass: 'bg-emerald-100 text-emerald-800',
+    Icon: CheckCircle2,
+  },
+  LIKVIDUOJAMA: {
+    label: 'Likviduojama įmonė',
+    badgeClass: 'bg-amber-100 text-amber-800',
+    Icon: AlertTriangle,
+  },
+  BANKRUTUOJANTI: {
+    label: 'Bankrutuojanti įmonė',
+    badgeClass: 'bg-rose-100 text-rose-800',
+    Icon: XCircle,
+  },
+  NEZINOMA: {
+    label: 'Nežinomas / Neįvertintas registre',
+    badgeClass: 'bg-slate-100 text-slate-700',
+    Icon: Info,
+  },
+};
+
 export const LegalSummaryCard: React.FC<LegalSummaryCardProps> = ({ legal }) => {
+  const jarStatusConfig =
+    JAR_STATUS_CONFIG[legal.jarStatus ?? 'NEZINOMA'] ?? JAR_STATUS_CONFIG.NEZINOMA;
+  const JarStatusIcon = jarStatusConfig.Icon;
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
@@ -68,9 +109,14 @@ export const LegalSummaryCard: React.FC<LegalSummaryCardProps> = ({ legal }) => 
 
         <div>
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Statusas registre</span>
-          <span className="font-medium text-slate-900">
-            {legal.jarStatus === 'VEIKIANTI' ? 'Veikiantis juridinis asmuo' : 'Nežinomas / Neįvertintas registre'}
-          </span>
+          <div className="mt-0.5">
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${jarStatusConfig.badgeClass}`}
+            >
+              <JarStatusIcon className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+              {jarStatusConfig.label}
+            </span>
+          </div>
         </div>
 
         <div className="flex items-start gap-2">
