@@ -68,7 +68,8 @@ All labels are pre-created in the GitHub repository. **Automations must never at
 ## 4. Automation Specifications
 
 ### Sidecar 1: `gh-auto-Issue-Plan-Create-For-Implement`
-- **Location**: `~/.gemini/config/sidecars/gh-auto-Issue-Plan-Create-For-Implement/sidecar.json`
+- **Sidecar ID / Folder**: `github-issue-implementation-plan-generator` (`display_name`: `gh-auto-Issue-Plan-Create-For-Implement`)
+- **Location**: `~/.gemini/config/sidecars/github-issue-implementation-plan-generator/sidecar.json`
 - **Model**: `gemini-4-hydrogen-xhigh`
 - **Schedule**: `CRON_TZ=Europe/Vilnius */10 * * * *` (Every 10 minutes)
 - **Restart Policy**: `always`
@@ -95,7 +96,8 @@ All labels are pre-created in the GitHub repository. **Automations must never at
      - Post plain single-line confirmation comment (no backticks, `$`, or chaining).
 
 ### Sidecar 2: `gh-auto-Issue-Implement-Plan-Ready`
-- **Location**: `~/.gemini/config/sidecars/gh-auto-Issue-Implement-Plan-Ready/sidecar.json`
+- **Sidecar ID / Folder**: `plan-ready-issue-implementer` (`display_name`: `gh-auto-Issue-Implement-Plan-Ready`)
+- **Location**: `~/.gemini/config/sidecars/plan-ready-issue-implementer/sidecar.json`
 - **Model**: `gemini-4-hydrogen-high`
 - **Schedule**: `CRON_TZ=Europe/Vilnius */15 * * * *` (Every 15 minutes)
 - **Restart Policy**: `always`
