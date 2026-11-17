@@ -104,3 +104,23 @@ export interface TrustAuditResult {
   vvtatRulesMatched: VvtatRulesMatched;
   recommendations: StructuredRecommendations;
 }
+
+export type JarEntityStatus = 'VEIKIANTI' | 'LIKVIDUOJAMA' | 'BANKRUTUOJANTI' | 'NEZINOMA';
+
+export interface JarCacheEntity {
+  companyCode: string;
+  domain: string;
+  companyName: string;
+  jarStatus: string;
+  vatCode?: string;
+  address?: string;
+  email?: string;
+  phone?: string;
+  isLithuanianOrEu?: boolean;
+}
+
+export interface JarEntitiesCache {
+  lastUpdated: string;
+  source: string;
+  entities: JarCacheEntity[];
+}

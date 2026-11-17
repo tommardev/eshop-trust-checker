@@ -1,77 +1,60 @@
-import type { LegalEntityInfo } from '../types/audit.ts';
+import jarCache from '../data/jar-entities-cache.json' with { type: 'json' };
+import { VvtatChecker } from './vvtat-checker.ts';
+import type {
+  LegalEntityInfo,
+  JarCacheEntity,
+  JarEntitiesCache,
+  JarEntityStatus,
+} from '../types/audit.ts';
 
 export class JarChecker {
-  /**
-   * Žinomų patikimų Lietuvos el. prekybos / valstybinių subjektų duomenų bazė (etalonas)
-   */
-  private static knownEntities: Record<string, Partial<LegalEntityInfo>> = {
-    'kalykla.lt': {
-      found: true,
-      companyFound: true,
-      companyCode: '120153835',
-      companyName: 'UAB „Lietuvos monetų kalykla“',
-      vatCode: 'LT201538314',
-      hasVatCode: true,
-      address: 'Eigulių g. 4, LT-03150 Vilnius',
-      physicalAddress: 'Eigulių g. 4, LT-03150 Vilnius',
-      email: 'info@kalykla.lt',
-      phone: '+370 5 216 2616',
-      jarStatus: 'VEIKIANTI',
-      isValidCodeFormat: true,
-      isLithuanianOrEu: true,
-    },
-    'pigu.lt': {
-      found: true,
-      companyFound: true,
-      companyCode: '300866792',
-      companyName: 'UAB „Pigu“',
-      vatCode: 'LT100003295815',
-      hasVatCode: true,
-      address: 'Laisvės pr. 75, Vilnius',
-      physicalAddress: 'Laisvės pr. 75, Vilnius',
-      email: 'pagalba@pigu.lt',
-      phone: '+370 661 05555',
-      jarStatus: 'VEIKIANTI',
-      isValidCodeFormat: true,
-      isLithuanianOrEu: true,
-    },
-    'senukai.lt': {
-      found: true,
-      companyFound: true,
-      companyCode: '234376520',
-      companyName: 'UAB „Kesko Senukai Digital“',
-      vatCode: 'LT343765219',
-      hasVatCode: true,
-      address: 'Kareivių g. 11B, Vilnius',
-      physicalAddress: 'Kareivių g. 11B, Vilnius',
-      email: 'info@senukai.lt',
-      phone: '+370 700 11119',
-      jarStatus: 'VEIKIANTI',
-      isValidCodeFormat: true,
-      isLithuanianOrEu: true,
-    },
-    'topocentras.lt': {
-      found: true,
-      companyFound: true,
-      companyCode: '134777619',
-      companyName: 'UAB „Topo grupė“',
-      vatCode: 'LT347776113',
-      hasVatCode: true,
-      address: 'Savanorių pr. 206A, Kaunas',
-      physicalAddress: 'Savanorių pr. 206A, Kaunas',
-      email: 'info@topocentras.lt',
-      phone: '+370 700 55800',
-      jarStatus: 'VEIKIANTI',
-      isValidCodeFormat: true,
-      isLithuanianOrEu: true,
+  private static safeNormalizeDomain(domain: unknown): string {
+    return typeof domain === 'string' ? VvtatChecker.normalizeDomain(domain) : '';
+  }
+
+  private static cleanCompanyCode(code: unknown): string {
+    if (!code || typeof code !== 'string') {
+      return '';
     }
-  };
+    return code.trim().replace(/\D/g, '');
+  }
+
+  private static readonly entitiesByDomain: Map<string, JarCacheEntity> = new Map(
+    ((jarCache as JarEntitiesCache).entities ?? [])
+      .map((entity) => [JarChecker.safeNormalizeDomain(entity.domain), entity] as const)
+      .filter(([domain]) => domain.length > 0)
+  );
+
+  private static readonly entitiesByCode: Map<string, JarCacheEntity> = new Map(
+    ((jarCache as JarEntitiesCache).entities ?? [])
+      .map((entity) => [JarChecker.cleanCompanyCode(entity.companyCode), entity] as const)
+      .filter(([code]) => code.length === 9)
+  );
+
+  private static toLegalEntityInfo(entry: JarCacheEntity): LegalEntityInfo {
+    const companyCode = this.cleanCompanyCode(entry.companyCode);
+    return {
+      found: true,
+      companyFound: true,
+      companyCode,
+      companyName: entry.companyName,
+      vatCode: entry.vatCode,
+      hasVatCode: Boolean(entry.vatCode),
+      address: entry.address,
+      physicalAddress: entry.address,
+      email: entry.email,
+      phone: entry.phone,
+      jarStatus: this.classifyStatus(entry.jarStatus),
+      isValidCodeFormat: this.validateCompanyCodeFormat(companyCode),
+      isLithuanianOrEu: entry.isLithuanianOrEu ?? true,
+    };
+  }
 
   /**
    * Tikrina Lietuvos juridinio asmens kodo (9 skaitmenų) kontrolinį skaičių pagal Modulo 11 algoritmą
    */
-  public static validateCompanyCodeFormat(code: string): boolean {
-    const cleaned = code.trim().replace(/\D/g, '');
+  public static validateCompanyCodeFormat(code: unknown): boolean {
+    const cleaned = this.cleanCompanyCode(code);
     if (cleaned.length !== 9) {
       return false;
     }
@@ -83,7 +66,7 @@ export class JarChecker {
       sum1 += digits[i] * weights1[i];
     }
 
-    let k = sum1 % 11;
+    const k = sum1 % 11;
     if (k !== 10) {
       return k === digits[8];
     }
@@ -104,32 +87,101 @@ export class JarChecker {
   }
 
   /**
+   * Klasifikuoja žalią JAR teisinio statuso eilutę į standartizuotą statusą
+   */
+  public static classifyStatus(rawStatus?: unknown): JarEntityStatus {
+    if (!rawStatus || typeof rawStatus !== 'string') {
+      return 'NEZINOMA';
+    }
+
+    const s = rawStatus.toLowerCase().trim();
+    if (!s) {
+      return 'NEZINOMA';
+    }
+
+    if (s.includes('bankrut') || s.includes('bankrupt')) {
+      return 'BANKRUTUOJANTI';
+    }
+    if (s.includes('likvid') || s.includes('liquidat')) {
+      return 'LIKVIDUOJAMA';
+    }
+    // Tikriname išregistravimo ir neaktyvumo / neigimo požymius prieš 'registruot' / 'active' / 'veikian'
+    if (
+      s.includes('išregistruot') ||
+      s.includes('isregistruot') ||
+      s.includes('deregister') ||
+      s.includes('inactive') ||
+      s.includes('neveikian') ||
+      s.includes('non-active') ||
+      s.includes('not active') ||
+      s.includes('deactivat')
+    ) {
+      return 'NEZINOMA';
+    }
+    // JAR duomenyse „Teisinis statusas neįregistruotas“ reiškia aktyvų (veikiantį) juridinį asmenį
+    if (
+      s.includes('veikian') ||
+      s.includes('neįregistruot') ||
+      s.includes('neiregistruot') ||
+      s.includes('registruot') ||
+      s.includes('active')
+    ) {
+      return 'VEIKIANTI';
+    }
+
+    return 'NEZINOMA';
+  }
+
+  /**
+   * Ieško juridinio asmens duomenų pagal 9 skaitmenų įmonės kodą iš lokalių JAR duomenų
+   */
+  public static lookupByCode(code: unknown): LegalEntityInfo | null {
+    const cleaned = this.cleanCompanyCode(code);
+    if (cleaned.length !== 9) {
+      return null;
+    }
+
+    const entry = this.entitiesByCode.get(cleaned);
+    if (!entry) {
+      return null;
+    }
+
+    return this.toLegalEntityInfo(entry);
+  }
+
+  /**
    * Tikrina įmonės duomenis pagal domeną arba ištrauktą kodą
    */
   public static lookupEntity(domain: string, extractedCode?: string): LegalEntityInfo {
-    const normDomain = domain.toLowerCase().replace(/^www\./, '');
-    
-    // 1. Jei tai žinomas etaloninis subjektas
-    if (this.knownEntities[normDomain]) {
-      return {
-        found: true,
-        companyFound: true,
-        isLithuanianOrEu: true,
-        ...this.knownEntities[normDomain]
-      } as LegalEntityInfo;
+    const normDomain = this.safeNormalizeDomain(domain);
+
+    // 1. Jei tai žinomas subjektas pagal domeną iš JAR talpyklos
+    if (normDomain) {
+      const domainMatch = this.entitiesByDomain.get(normDomain);
+      if (domainMatch) {
+        return this.toLegalEntityInfo(domainMatch);
+      }
     }
 
     // 2. Jei ištrauktas įmonės kodas iš svetainės HTML
-    if (extractedCode) {
+    if (extractedCode && typeof extractedCode === 'string') {
+      const codeMatch = this.lookupByCode(extractedCode);
+      if (codeMatch) {
+        return codeMatch;
+      }
+
       const isValid = this.validateCompanyCodeFormat(extractedCode);
-      return {
-        found: true,
-        companyFound: true,
-        companyCode: extractedCode,
-        isValidCodeFormat: isValid,
-        jarStatus: 'NEZINOMA', // Be tiesioginės JAR API sesijos statusas yra nežinomas, net jei algoritmas tinka
-        isLithuanianOrEu: isValid,
-      };
+      if (isValid) {
+        const cleanedCode = this.cleanCompanyCode(extractedCode);
+        return {
+          found: true,
+          companyFound: true,
+          companyCode: cleanedCode,
+          isValidCodeFormat: true,
+          jarStatus: 'NEZINOMA', // Be tiesioginės JAR API sesijos statusas yra nežinomas, net jei algoritmas tinka
+          isLithuanianOrEu: true,
+        };
+      }
     }
 
     return {

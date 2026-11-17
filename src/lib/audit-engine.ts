@@ -46,6 +46,7 @@ export class AuditEngine {
     // Sujungiame iškrapštytus kontaktus su JAR duomenimis
     const mergedLegal = {
       ...legalInfo,
+      companyCode: legalInfo.companyCode || scrapedData.legalEntity.companyCode,
       email: legalInfo.email || scrapedData.legalEntity.email,
       phone: legalInfo.phone || scrapedData.legalEntity.phone,
       hasLegacyPhonePrefix: scrapedData.legalEntity.hasLegacyPhonePrefix ?? false,
@@ -112,7 +113,7 @@ export class AuditEngine {
     }
 
     // C. Juridinio asmens tapatybė (VVTAT Taisyklė #1)
-    if (mergedLegal.found && mergedLegal.companyCode) {
+    if (mergedLegal.companyCode) {
       if (mergedLegal.isValidCodeFormat !== false) {
         checklist.push({
           id: 'legal-identity',
@@ -122,11 +123,13 @@ export class AuditEngine {
           description: `Rastas registruotas juridinis asmuo (${mergedLegal.companyName || 'Įmonės kodas: ' + mergedLegal.companyCode}). Nurodytas buveinės adresas ir kontaktai.`,
           sourceReference: 'VVTAT 1-oji auksinė taisyklė ir Registrų Centras',
         });
-        keyPoints.push({
-          type: 'success',
-          title: 'Oficialūs pardavėjo rekvizitai rasti',
-          description: `Identifikuotas juridinis asmuo su galiojančiu 9 skaitmenų JAR kodu (${mergedLegal.companyCode}).`
-        });
+        if (mergedLegal.jarStatus !== 'BANKRUTUOJANTI' && mergedLegal.jarStatus !== 'LIKVIDUOJAMA') {
+          keyPoints.push({
+            type: 'success',
+            title: 'Oficialūs pardavėjo rekvizitai rasti',
+            description: `Identifikuotas juridinis asmuo su galiojančiu 9 skaitmenų JAR kodu (${mergedLegal.companyCode}).`
+          });
+        }
       } else {
         score -= 25;
         checklist.push({
@@ -141,6 +144,47 @@ export class AuditEngine {
           type: 'warning',
           title: 'Neteisingas įmonės kodo formatas',
           description: `Nurodytas kodas ${mergedLegal.companyCode} neatitinka Modulo 11 kontrolinio skaitmens.`
+        });
+      }
+
+      if (mergedLegal.jarStatus === 'BANKRUTUOJANTI') {
+        score -= 40;
+        checklist.push({
+          id: 'legal-status',
+          category: 'LEGAL',
+          title: 'JAR Teisinis statusas: Bankrutuojanti įmonė',
+          status: 'FAIL',
+          description: 'Juridinių asmenų registre (JAR) nurodyta, kad šiam juridiniam asmeniui vykdomos bankroto procedūros.',
+          sourceReference: 'Registrų Centras (JAR)',
+        });
+        keyPoints.push({
+          type: 'danger',
+          title: 'Įmonė bankrutuoja',
+          description: 'Pardavėjo juridinis asmuo yra bankrutuojantis. Didelė rizika prarasti pinigus neatgavus prekių.',
+        });
+      } else if (mergedLegal.jarStatus === 'LIKVIDUOJAMA') {
+        score -= 25;
+        checklist.push({
+          id: 'legal-status',
+          category: 'LEGAL',
+          title: 'JAR Teisinis statusas: Likviduojama įmonė',
+          status: 'WARN',
+          description: 'Juridinių asmenų registre (JAR) nurodyta, kad šis juridinis asmuo yra likvidavimo stadijoje.',
+          sourceReference: 'Registrų Centras (JAR)',
+        });
+        keyPoints.push({
+          type: 'warning',
+          title: 'Įmonė likviduojama',
+          description: 'Pardavėjo juridinis asmuo yra likvidavimo stadijoje.',
+        });
+      } else if (mergedLegal.jarStatus === 'VEIKIANTI') {
+        checklist.push({
+          id: 'legal-status',
+          category: 'LEGAL',
+          title: 'JAR Teisinis statusas: Veikianti įmonė',
+          status: 'PASS',
+          description: 'Juridinių asmenų registre (JAR) juridinis asmuo yra registruotas kaip oficialiai veikiantis.',
+          sourceReference: 'Registrų Centras (JAR)',
         });
       }
     } else {
@@ -278,7 +322,7 @@ export class AuditEngine {
         category: 'LEGAL',
         title: 'Pasenęs ryšio numerio formatas (prefiksas 8)',
         status: 'WARN',
-        description: `Svetainėje nurodytas telefono numeris (${mergedLegal.phone}) naudoja nebegaliojantį prefiksą „8“ vietoje naujojo standarto „0“ arba „+370“. Tai rodo, kad kontaktiniai duomenys ilgą laiką neatnaujinti ir svetainė gali būti apleista.`,
+        description: `Svetainėje nurodytas telefono numeris (${scrapedData.legalEntity.phone || mergedLegal.phone}) naudoja nebegaliojantį prefiksą „8“ vietoje naujojo standarto „0“ arba „+370“. Tai rodo, kad kontaktiniai duomenys ilgą laiką neatnaujinti ir svetainė gali būti apleista.`,
         sourceReference: 'Ryšių reguliavimo tarnybos (RRT) nacionalinis numeracijos planas',
         sourceUrl: 'https://www.rrt.lt/',
       });

@@ -1,0 +1,75 @@
+{
+  "lastUpdated": "2026-11-16T00:00:00.000Z",
+  "source": "https://data.gov.lt/datasets/1545/ (Registrų Centras JAR atvirieji duomenys)",
+  "entities": [
+    {
+      "companyCode": "110052936",
+      "domain": "kalykla.lt",
+      "companyName": "UAB „Lietuvos monetų kalykla“",
+      "jarStatus": "VEIKIANTI",
+      "vatCode": "LT100529314",
+      "address": "Eigulių g. 4, LT-03150 Vilnius",
+      "email": "info@kalykla.lt",
+      "phone": "+370 5 216 2616",
+      "isLithuanianOrEu": true
+    },
+    {
+      "companyCode": "300866792",
+      "domain": "pigu.lt",
+      "companyName": "UAB „Pigu“",
+      "jarStatus": "VEIKIANTI",
+      "vatCode": "LT100003295815",
+      "address": "Laisvės pr. 75, Vilnius",
+      "email": "pagalba@pigu.lt",
+      "phone": "+370 661 05555",
+      "isLithuanianOrEu": true
+    },
+    {
+      "companyCode": "234376520",
+      "domain": "senukai.lt",
+      "companyName": "UAB „Kesko Senukai Digital“",
+      "jarStatus": "VEIKIANTI",
+      "vatCode": "LT343765219",
+      "address": "Kareivių g. 11B, Vilnius",
+      "email": "info@senukai.lt",
+      "phone": "+370 700 11119",
+      "isLithuanianOrEu": true
+    },
+    {
+      "companyCode": "134777619",
+      "domain": "topocentras.lt",
+      "companyName": "UAB „Topo grupė“",
+      "jarStatus": "VEIKIANTI",
+      "vatCode": "LT347776113",
+      "address": "Savanorių pr. 206A, Kaunas",
+      "email": "info@topocentras.lt",
+      "phone": "+370 700 55800",
+      "isLithuanianOrEu": true
+    },
+    {
+      "companyCode": "123033512",
+      "domain": "maxima.lt",
+      "companyName": "MAXIMA LT, UAB",
+      "jarStatus": "VEIKIANTI",
+      "vatCode": "LT230335113",
+      "address": "Savanorių pr. 5, Vilnius",
+      "isLithuanianOrEu": true
+    },
+    {
+      "companyCode": "302587414",
+      "domain": "likviduojama-shop.lt",
+      "companyName": "UAB „Likviduojama Prekyba“",
+      "jarStatus": "LIKVIDUOJAMA",
+      "address": "Vilniaus g. 1, Vilnius",
+      "isLithuanianOrEu": true
+    },
+    {
+      "companyCode": "301234564",
+      "domain": "bankrutuojanti-shop.lt",
+      "companyName": "UAB „Bankrutuojanti E-Parduotuvė“",
+      "jarStatus": "BANKRUTUOJANTI",
+      "address": "Kauno g. 2, Kaunas",
+      "isLithuanianOrEu": true
+    }
+  ]
+}
