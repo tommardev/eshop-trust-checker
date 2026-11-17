@@ -33,11 +33,19 @@ export class AuditEngine {
     // Apjungiame domeno ir SSL techninius duomenis
     const technicalSecurity: DomainSecurityInfo = {
       ...whoisInfo,
-      isHttps: sslInfo.hasValidSsl || whoisInfo.isHttps,
+      isHttps: sslInfo.hasValidSsl || (sslInfo.authorized && !sslInfo.isExpired),
       hasValidSsl: sslInfo.hasValidSsl,
       sslValid: sslInfo.sslValid,
-      sslIssuer: sslInfo.issuer || whoisInfo.sslIssuer || 'Let\'s Encrypt / DigiCert / GlobalSign',
+      sslIssuer: sslInfo.issuer,
       sslValidUntil: sslInfo.validTo,
+      validFrom: sslInfo.validFrom,
+      protocol: sslInfo.protocol,
+      sslProtocol: sslInfo.protocol,
+      selfSigned: Boolean(sslInfo.selfSigned),
+      sslError: sslInfo.error,
+      sslWarning: sslInfo.warning,
+      whoisWarning: whoisInfo.whoisWarning,
+      whoisError: whoisInfo.whoisError,
     };
 
     // 2. Juridinio asmens tikrinimas (JAR / Rekvizitai)
@@ -213,13 +221,22 @@ export class AuditEngine {
         category: 'TECHNICAL',
         title: 'Domeno amžius ir registracija',
         status: 'WARN',
-        description: `Domenas registruotas neseniai (< 90 dienų). Dauguma fiktyvių svetainių sukuriamos trumpam prieš pradedant sukčiavimą.`,
+        description: `Domenas registruotas neseniai (${technicalSecurity.domainAgeDays ? technicalSecurity.domainAgeDays + ' d.' : '< 90 dienų'}). Dauguma fiktyvių svetainių sukuriamos trumpam prieš pradedant sukčiavimą.`,
         sourceReference: 'DOMREG / WHOIS registras',
       });
       keyPoints.push({
         type: 'warning',
         title: 'Naujai registruotas domenas',
         description: 'Domenas veikia mažiau nei 3 mėnesius. Būkite atsargūs atlikdami išankstinius apmokėjimus.'
+      });
+    } else if (technicalSecurity.whoisWarning && !technicalSecurity.domainAgeDays) {
+      checklist.push({
+        id: 'domain-age',
+        category: 'TECHNICAL',
+        title: 'Domeno amžius ir registracija',
+        status: 'INFO',
+        description: `Domeno registracijos datos nepavyko gauti iš RDAP/WHOIS registro (${technicalSecurity.whoisWarning}).`,
+        sourceReference: 'DOMREG / WHOIS',
       });
     } else {
       const ageText = technicalSecurity.domainAgeMonths ? `(apie ${Math.floor(technicalSecurity.domainAgeMonths / 12)} m. / ${technicalSecurity.domainAgeMonths} mėn.)` : '';
@@ -234,14 +251,29 @@ export class AuditEngine {
     }
 
     // E. SSL / HTTPS šifravimas (VVTAT Taisyklė #4)
-    if (technicalSecurity.sslValid) {
+    if (sslInfo.hasValidSsl) {
       checklist.push({
         id: 'ssl-security',
         category: 'TECHNICAL',
         title: 'Mokėjimo kortelių ir ryšio šifravimas (SSL)',
         status: 'PASS',
-        description: `Svetainė naudoja saugų HTTPS šifruotą ryšį (${technicalSecurity.sslIssuer || 'Sertifikuota'}). Naršyklėje rodomas spynos simbolis.`,
+        description: `Svetainė naudoja saugų HTTPS šifruotą ryšį (${sslInfo.issuer || 'Sertifikuota'}${sslInfo.protocol ? ', ' + sslInfo.protocol : ''}). Naršyklėje rodomas saugaus ryšio simbolis.`,
         sourceReference: 'VVTAT 4-oji taisyklė: Saugokite mokėjimo duomenis',
+      });
+    } else if (sslInfo.selfSigned) {
+      score -= 15;
+      checklist.push({
+        id: 'ssl-security',
+        category: 'TECHNICAL',
+        title: 'Mokėjimo kortelių ir ryšio šifravimas (SSL)',
+        status: 'WARN',
+        description: `Svetainė naudoja savarankiškai pasirašytą arba nepatvirtintą SSL sertifikatą (${sslInfo.issuer || 'Nežinomas leidėjas'}). Ryšys šifruotas, tačiau neatpažįstamas naršyklių kaip patikimas.`,
+        sourceReference: 'VVTAT 4-oji taisyklė',
+      });
+      keyPoints.push({
+        type: 'warning',
+        title: 'Savarankiškai pasirašytas SSL sertifikatas',
+        description: 'Svetainė naudoja nepatikimo leidėjo sertifikatą. Galimas duomenų perėmimo pavojus.',
       });
     } else {
       score -= 30;
@@ -250,13 +282,13 @@ export class AuditEngine {
         category: 'TECHNICAL',
         title: 'Mokėjimo kortelių ir ryšio šifravimas (SSL)',
         status: 'FAIL',
-        description: 'Svetainėje nėra galiojančio saugaus SSL sertifikato! Įvedami duomenys ir mokėjimo kortelės gali būti perimtos.',
+        description: sslInfo.warning || 'Svetainėje nėra galiojančio saugaus SSL sertifikato! Įvedami duomenys ir mokėjimo kortelės gali būti perimtos.',
         sourceReference: 'VVTAT 4-oji taisyklė',
       });
       keyPoints.push({
         type: 'danger',
         title: 'Nesaugus arba negaliojantis SSL ryšys',
-        description: 'Nesuveskite slaptažodžių ar banko kortelių duomenų neužšifruotoje svetainėje.'
+        description: sslInfo.warning || 'Nesuveskite slaptažodžių ar banko kortelių duomenų neužšifruotoje svetainėje.',
       });
     }
 

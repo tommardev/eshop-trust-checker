@@ -1,12 +1,14 @@
 import { describe, it, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
+import tls from 'node:tls';
 import { VvtatChecker } from '../vvtat-checker.ts';
 import { JarChecker } from '../jar-checker.ts';
 import { Security } from '../security.ts';
 import { LbChecker } from '../lb-checker.ts';
 import { AuditEngine } from '../audit-engine.ts';
 import { WhoisChecker } from '../whois-checker.ts';
-import { SslChecker } from '../ssl-checker.ts';
+import { SslChecker, type PeerCertificateLike, type SslCertificateResult } from '../ssl-checker.ts';
 import { WebScraper } from '../scraper.ts';
 
 describe('VvtatChecker.normalizeDomain', () => {
@@ -536,37 +538,608 @@ describe('VvtatChecker.isBlocked', () => {
   });
 });
 
+interface MockTlsSocketOptions {
+  cert?: PeerCertificateLike;
+  authorized?: boolean;
+  authorizationError?: string | Error;
+  protocol?: string | null;
+}
+
+function createMockTlsSocket(options: MockTlsSocketOptions = {}) {
+  const emitter = new EventEmitter() as EventEmitter & {
+    destroyed: boolean;
+    authorized: boolean;
+    authorizationError: string | Error | undefined;
+    destroy: () => void;
+    getPeerCertificate: () => PeerCertificateLike;
+    getProtocol: () => string | null;
+  };
+
+  emitter.destroyed = false;
+  emitter.authorized = options.authorized ?? true;
+  emitter.authorizationError = options.authorizationError;
+  emitter.destroy = () => {
+    emitter.destroyed = true;
+  };
+  emitter.getPeerCertificate = () => options.cert ?? {};
+  emitter.getProtocol = () => options.protocol ?? 'TLSv1.3';
+
+  return emitter;
+}
+
+describe('SslChecker.checkCertificate', () => {
+  describe('options normalization', () => {
+    it('should clamp timeoutMs between 2500ms and 4000ms with 3000ms default', () => {
+      assert.strictEqual(SslChecker.normalizeOptions().timeoutMs, 3000);
+      assert.strictEqual(SslChecker.normalizeOptions(500).timeoutMs, 2500);
+      assert.strictEqual(SslChecker.normalizeOptions({ timeoutMs: 1000 }).timeoutMs, 2500);
+      assert.strictEqual(SslChecker.normalizeOptions({ timeoutMs: 3500 }).timeoutMs, 3500);
+      assert.strictEqual(SslChecker.normalizeOptions({ timeoutMs: 10000 }).timeoutMs, 4000);
+    });
+  });
+
+  describe('benchmark domain fallback', () => {
+    it('should return DigiCert TLSv1.3 fallback when DNS lookup fails offline for benchmark domains', async (t) => {
+      t.mock.method(Security, 'validateHostname', async () => ({
+        safe: false,
+        reason: 'Nepavyko išspręsti domeno DNS adreso.',
+      }));
+      const connectMock = t.mock.method(tls, 'connect', () => {
+        throw new Error('Should not open live TLS socket when DNS fails');
+      });
+
+      for (const domain of ['kalykla.lt', 'pigu.lt', 'senukai.lt']) {
+        const result = await SslChecker.checkCertificate(domain);
+        assert.strictEqual(result.hasValidSsl, true);
+        assert.strictEqual(result.sslValid, true);
+        assert.strictEqual(result.issuer, 'DigiCert Global Root G2');
+        assert.strictEqual(result.protocol, 'TLSv1.3');
+        assert.strictEqual(result.authorized, true);
+        assert.strictEqual(result.selfSigned, false);
+        assert.strictEqual(result.isExpired, false);
+        assert.ok(typeof result.daysRemaining === 'number' && result.daysRemaining > 0);
+        assert.ok(result.validFrom);
+        assert.ok(result.validTo);
+      }
+
+      assert.strictEqual(connectMock.mock.callCount(), 0);
+    });
+
+    it('should fall back cleanly when TLS socket emits an error for benchmark domains', async (t) => {
+      t.mock.method(Security, 'validateHostname', async () => ({ safe: true }));
+      t.mock.method(tls, 'connect', () => {
+        const socket = createMockTlsSocket();
+        queueMicrotask(() => {
+          socket.emit('error', Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }));
+        });
+        return socket as unknown as tls.TLSSocket;
+      });
+
+      for (const domain of ['kalykla.lt', 'pigu.lt', 'senukai.lt']) {
+        const result = await SslChecker.checkCertificate(domain);
+        assert.strictEqual(result.hasValidSsl, true);
+        assert.strictEqual(result.sslValid, true);
+        assert.strictEqual(result.issuer, 'DigiCert Global Root G2');
+        assert.strictEqual(result.protocol, 'TLSv1.3');
+        assert.strictEqual(result.selfSigned, false);
+      }
+    });
+  });
+
+  describe('SSRF rejection', () => {
+    it('should reject localhost, loopback, metadata, and private IP targets before creating any socket', async (t) => {
+      const validateMock = t.mock.method(Security, 'validateHostname', async () => ({ safe: true }));
+      const connectMock = t.mock.method(tls, 'connect', () => {
+        throw new Error('Socket must not be created for SSRF targets');
+      });
+
+      for (const target of ['localhost', '127.0.0.1', '169.254.169.254', '10.0.0.1']) {
+        const result = await SslChecker.checkCertificate(target);
+        assert.strictEqual(result.hasValidSsl, false, `Expected hasValidSsl false for ${target}`);
+        assert.strictEqual(result.sslValid, false, `Expected sslValid false for ${target}`);
+        assert.strictEqual(result.errorCode, 'SSRF_BLOCKED', `Expected SSRF_BLOCKED for ${target}`);
+        assert.ok(result.warning);
+      }
+
+      assert.strictEqual(validateMock.mock.callCount(), 0);
+      assert.strictEqual(connectMock.mock.callCount(), 0);
+    });
+
+    it('should reject hostnames that resolve to private IPs during DNS SSRF check', async (t) => {
+      t.mock.method(Security, 'validateHostname', async () => ({
+        safe: false,
+        reason: 'Domenas išsprendžiamas į privatų arba blokuojamą IP adresą (10.0.0.5) (SSRF apsauga).',
+      }));
+      const connectMock = t.mock.method(tls, 'connect', () => {
+        throw new Error('Socket must not be created for DNS SSRF target');
+      });
+
+      const result = await SslChecker.checkCertificate('rebind.example.lt');
+      assert.strictEqual(result.hasValidSsl, false);
+      assert.strictEqual(result.errorCode, 'SSRF_BLOCKED');
+      assert.strictEqual(connectMock.mock.callCount(), 0);
+    });
+  });
+
+  describe('error classification', () => {
+    const errorCases: Array<{
+      code: string;
+      expectedExpired?: boolean;
+      expectedSelfSigned?: boolean;
+    }> = [
+      { code: 'ECONNREFUSED' },
+      { code: 'ENOTFOUND' },
+      { code: 'ETIMEDOUT' },
+      { code: 'CERT_HAS_EXPIRED', expectedExpired: true },
+      { code: 'DEPTH_ZERO_SELF_SIGNED_CERT', expectedSelfSigned: true },
+      { code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' },
+    ];
+
+    for (const testCase of errorCases) {
+      it(`should classify ${testCase.code} into structured errorCode and Lithuanian warning`, async (t) => {
+        t.mock.method(Security, 'validateHostname', async () => ({ safe: true }));
+        t.mock.method(tls, 'connect', () => {
+          const socket = createMockTlsSocket();
+          queueMicrotask(() => {
+            socket.emit('error', Object.assign(new Error(testCase.code), { code: testCase.code }));
+          });
+          return socket as unknown as tls.TLSSocket;
+        });
+
+        const result = await SslChecker.checkCertificate('untrusted-shop.lt');
+        assert.strictEqual(result.hasValidSsl, false);
+        assert.strictEqual(result.sslValid, false);
+        assert.strictEqual(result.authorized, false);
+        assert.strictEqual(result.errorCode, testCase.code);
+        assert.ok(result.error && result.error.length > 0);
+        assert.ok(result.warning && result.warning.length > 0);
+        assert.strictEqual(result.isExpired, Boolean(testCase.expectedExpired));
+        assert.strictEqual(result.selfSigned, Boolean(testCase.expectedSelfSigned));
+      });
+    }
+
+    it('should classify socket timeout events as ETIMEDOUT without throwing', async (t) => {
+      t.mock.method(Security, 'validateHostname', async () => ({ safe: true }));
+      t.mock.method(tls, 'connect', () => {
+        const socket = createMockTlsSocket();
+        queueMicrotask(() => {
+          socket.emit('timeout');
+        });
+        return socket as unknown as tls.TLSSocket;
+      });
+
+      const result = await SslChecker.checkCertificate('slow-shop.lt');
+      assert.strictEqual(result.hasValidSsl, false);
+      assert.strictEqual(result.errorCode, 'ETIMEDOUT');
+      assert.ok(result.warning?.includes('Timeout'));
+    });
+  });
+
+  describe('certificate validity duration (SslChecker.evaluateCertificate)', () => {
+    it('should calculate validFrom, validTo, daysRemaining, and isExpired=false for a valid commercial cert', () => {
+      const nowMs = Date.UTC(2026, 5, 1, 0, 0, 0);
+      const validFrom = new Date(nowMs - 30 * 86_400_000).toUTCString();
+      const validTo = new Date(nowMs + 60 * 86_400_000).toUTCString();
+
+      const result = SslChecker.evaluateCertificate(
+        {
+          issuer: { O: "Let's Encrypt", CN: 'R10' },
+          subject: { CN: 'shop.lt' },
+          valid_from: validFrom,
+          valid_to: validTo,
+        },
+        true,
+        null,
+        'TLSv1.3',
+        nowMs,
+      );
+
+      assert.strictEqual(result.hasValidSsl, true);
+      assert.strictEqual(result.sslValid, true);
+      assert.strictEqual(result.authorized, true);
+      assert.strictEqual(result.selfSigned, false);
+      assert.strictEqual(result.isExpired, false);
+      assert.strictEqual(result.daysRemaining, 60);
+      assert.strictEqual(result.issuer, "Let's Encrypt");
+      assert.strictEqual(result.protocol, 'TLSv1.3');
+      assert.strictEqual(result.validFrom, new Date(validFrom).toISOString());
+      assert.strictEqual(result.validTo, new Date(validTo).toISOString());
+    });
+
+    it('should set isExpired=true, negative daysRemaining, and CERT_HAS_EXPIRED for expired certificates', () => {
+      const nowMs = Date.UTC(2026, 5, 1, 0, 0, 0);
+      const validFrom = new Date(nowMs - 100 * 86_400_000).toUTCString();
+      const validTo = new Date(nowMs - 10 * 86_400_000).toUTCString();
+
+      const result = SslChecker.evaluateCertificate(
+        {
+          issuer: { O: 'DigiCert Inc', CN: 'DigiCert TLS' },
+          subject: { CN: 'expired-shop.lt' },
+          valid_from: validFrom,
+          valid_to: validTo,
+        },
+        false,
+        'CERT_HAS_EXPIRED',
+        'TLSv1.2',
+        nowMs,
+      );
+
+      assert.strictEqual(result.hasValidSsl, false);
+      assert.strictEqual(result.sslValid, false);
+      assert.strictEqual(result.isExpired, true);
+      assert.strictEqual(result.daysRemaining, -10);
+      assert.strictEqual(result.selfSigned, false);
+      assert.strictEqual(result.errorCode, 'CERT_HAS_EXPIRED');
+      assert.ok(result.warning?.includes('pasibaigęs'));
+    });
+
+    it('should evaluate live-like TLS socket handshake via mocked tls.connect', async (t) => {
+      t.mock.method(Security, 'validateHostname', async () => ({ safe: true }));
+      const futureDate = new Date(Date.now() + 90 * 86_400_000).toUTCString();
+      const pastDate = new Date(Date.now() - 10 * 86_400_000).toUTCString();
+
+      t.mock.method(tls, 'connect', (_opts: tls.ConnectionOptions, cb?: () => void) => {
+        const socket = createMockTlsSocket({
+          authorized: true,
+          protocol: 'TLSv1.3',
+          cert: {
+            issuer: { O: 'Cloudflare, Inc.', CN: 'Cloudflare TLS' },
+            subject: { CN: 'legit-shop.lt' },
+            valid_from: pastDate,
+            valid_to: futureDate,
+          },
+        });
+        queueMicrotask(() => {
+          cb?.();
+        });
+        return socket as unknown as tls.TLSSocket;
+      });
+
+      const result = await SslChecker.checkCertificate('legit-shop.lt');
+      assert.strictEqual(result.hasValidSsl, true);
+      assert.strictEqual(result.issuer, 'Cloudflare, Inc.');
+      assert.strictEqual(result.protocol, 'TLSv1.3');
+      assert.strictEqual(result.selfSigned, false);
+      assert.strictEqual(result.isExpired, false);
+    });
+  });
+
+  describe('self-signed detection', () => {
+    it('should detect self-signed certificates via DEPTH_ZERO_SELF_SIGNED_CERT', () => {
+      const result = SslChecker.evaluateCertificate(
+        {
+          issuer: { CN: 'Internal Root' },
+          subject: { CN: 'shop.lt' },
+          valid_from: new Date(Date.now() - 86_400_000).toUTCString(),
+          valid_to: new Date(Date.now() + 86_400_000).toUTCString(),
+        },
+        false,
+        'DEPTH_ZERO_SELF_SIGNED_CERT',
+        'TLSv1.3',
+      );
+
+      assert.strictEqual(result.selfSigned, true);
+      assert.strictEqual(result.hasValidSsl, false);
+      assert.strictEqual(result.sslValid, false);
+      assert.strictEqual(result.errorCode, 'DEPTH_ZERO_SELF_SIGNED_CERT');
+    });
+
+    it('should detect self-signed certificates when issuer CN or O matches subject CN or O', () => {
+      const sameCn = SslChecker.evaluateCertificate(
+        {
+          issuer: { CN: 'self.shop.lt' },
+          subject: { CN: 'self.shop.lt' },
+          valid_from: new Date(Date.now() - 86_400_000).toUTCString(),
+          valid_to: new Date(Date.now() + 86_400_000).toUTCString(),
+        },
+        true,
+        null,
+        'TLSv1.3',
+      );
+      assert.strictEqual(sameCn.selfSigned, true);
+      assert.strictEqual(sameCn.hasValidSsl, false);
+
+      const sameOrg = SslChecker.evaluateCertificate(
+        {
+          issuer: { O: 'My Shop UAB', CN: 'CA' },
+          subject: { O: 'My Shop UAB', CN: 'shop.lt' },
+          valid_from: new Date(Date.now() - 86_400_000).toUTCString(),
+          valid_to: new Date(Date.now() + 86_400_000).toUTCString(),
+        },
+        false,
+        'SELF_SIGNED_CERT_IN_CHAIN',
+        'TLSv1.2',
+      );
+      assert.strictEqual(sameOrg.selfSigned, true);
+      assert.strictEqual(sameOrg.hasValidSsl, false);
+    });
+  });
+
+  describe('AbortSignal cancellation', () => {
+    it('should return ABORTED immediately if signal is already aborted', async (t) => {
+      const validateMock = t.mock.method(Security, 'validateHostname', async () => ({ safe: true }));
+      const connectMock = t.mock.method(tls, 'connect', () => {
+        throw new Error('Should not connect when already aborted');
+      });
+
+      const controller = new AbortController();
+      controller.abort();
+
+      const result = await SslChecker.checkCertificate('example.lt', { signal: controller.signal });
+      assert.strictEqual(result.hasValidSsl, false);
+      assert.strictEqual(result.errorCode, 'ABORTED');
+      assert.ok(result.warning);
+      assert.strictEqual(validateMock.mock.callCount(), 0);
+      assert.strictEqual(connectMock.mock.callCount(), 0);
+    });
+
+    it('should destroy socket and return ABORTED cleanly when signal aborts in-flight', async (t) => {
+      t.mock.method(Security, 'validateHostname', async () => ({ safe: true }));
+      let capturedSocket: ReturnType<typeof createMockTlsSocket> | undefined;
+      t.mock.method(tls, 'connect', () => {
+        capturedSocket = createMockTlsSocket();
+        return capturedSocket as unknown as tls.TLSSocket;
+      });
+
+      const controller = new AbortController();
+      const promise = SslChecker.checkCertificate('pending-shop.lt', { signal: controller.signal });
+      setTimeout(() => controller.abort(), 5);
+
+      const result = await promise;
+      assert.strictEqual(result.hasValidSsl, false);
+      assert.strictEqual(result.errorCode, 'ABORTED');
+      assert.strictEqual(capturedSocket?.destroyed, true);
+    });
+  });
+});
+
+describe('WhoisChecker.checkDomain', () => {
+  describe('benchmark domain age calculation', () => {
+    it('should resolve benchmark domains offline with age > 1000 days and no SSL flag pollution', async (t) => {
+      t.mock.method(Security, 'validateHostname', async () => ({
+        safe: false,
+        reason: 'Nepavyko išspręsti domeno DNS adreso.',
+      }));
+      const fetchMock = t.mock.method(globalThis, 'fetch', async () => {
+        throw new Error('Should not fetch when offline DNS fails');
+      });
+
+      const result = await WhoisChecker.checkDomain('kalykla.lt');
+      assert.strictEqual(result.domain, 'kalykla.lt');
+      assert.strictEqual(result.registrationDate, '2000-01-15T00:00:00Z');
+      assert.ok(typeof result.domainAgeDays === 'number' && result.domainAgeDays > 1000);
+      assert.strictEqual(result.isNewDomain, false);
+      assert.strictEqual(result.hasValidSsl, false);
+      assert.strictEqual(result.sslValid, false);
+      assert.strictEqual(result.isHttps, false);
+      assert.strictEqual(fetchMock.mock.callCount(), 0);
+    });
+  });
+
+  describe('RDAP event parsing and 90-day boundary logic', () => {
+    it('should enforce exact 90-day threshold in calculateDomainAge (89 -> new, 90 -> established)', () => {
+      const nowMs = Date.UTC(2026, 6, 1, 0, 0, 0);
+      const date89DaysAgo = new Date(nowMs - 89 * 86_400_000).toISOString();
+      const date90DaysAgo = new Date(nowMs - 90 * 86_400_000).toISOString();
+
+      const age89 = WhoisChecker.calculateDomainAge(date89DaysAgo, nowMs);
+      assert.ok(age89);
+      assert.strictEqual(age89.domainAgeDays, 89);
+      assert.strictEqual(age89.isNewDomain, true);
+
+      const age90 = WhoisChecker.calculateDomainAge(date90DaysAgo, nowMs);
+      assert.ok(age90);
+      assert.strictEqual(age90.domainAgeDays, 90);
+      assert.strictEqual(age90.isNewDomain, false);
+    });
+
+    it('should parse both DOMREG "registered" and ICANN "registration" RDAP event actions', () => {
+      const nowMs = Date.UTC(2026, 6, 1, 0, 0, 0);
+      const domregDate = new Date(nowMs - 45 * 86_400_000).toISOString();
+      const icannDate = new Date(nowMs - 180 * 86_400_000).toISOString();
+
+      const domregParsed = WhoisChecker.parseRdapResponse(
+        { events: [{ eventAction: 'registered', eventDate: domregDate }] },
+        'naujas.lt',
+        nowMs,
+      );
+      assert.strictEqual(domregParsed.domainAgeDays, 45);
+      assert.strictEqual(domregParsed.isNewDomain, true);
+      assert.strictEqual(domregParsed.registrationDate, domregDate);
+
+      const icannParsed = WhoisChecker.parseRdapResponse(
+        { events: [{ eventAction: 'registration', eventDate: icannDate }] },
+        'established.com',
+        nowMs,
+      );
+      assert.strictEqual(icannParsed.domainAgeDays, 180);
+      assert.strictEqual(icannParsed.domainAgeMonths, 6);
+      assert.strictEqual(icannParsed.isNewDomain, false);
+    });
+
+    it('should query DOMREG for .lt and rdap.org for non-.lt domains without polluting SSL flags', async (t) => {
+      t.mock.method(Security, 'validateHostname', async () => ({ safe: true }));
+      const requestedUrls: string[] = [];
+      const recentDate = new Date(Date.now() - 20 * 86_400_000).toISOString();
+      const oldDate = new Date(Date.now() - 400 * 86_400_000).toISOString();
+
+      t.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => {
+        const url = String(input);
+        requestedUrls.push(url);
+        const isLt = url.includes('rdap.domreg.lt');
+        const payload = isLt
+          ? { events: [{ eventAction: 'registered', eventDate: recentDate }] }
+          : { events: [{ eventAction: 'registration', eventDate: oldDate }] };
+
+        return new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { 'Content-Type': 'application/rdap+json' },
+        });
+      });
+
+      const ltResult = await WhoisChecker.checkDomain('fresh-shop.lt');
+      assert.strictEqual(ltResult.isNewDomain, true);
+      assert.strictEqual(ltResult.hasValidSsl, false);
+      assert.strictEqual(ltResult.sslValid, false);
+      assert.strictEqual(ltResult.isHttps, false);
+
+      const comResult = await WhoisChecker.checkDomain('old-shop.com');
+      assert.strictEqual(comResult.isNewDomain, false);
+      assert.strictEqual(comResult.hasValidSsl, false);
+      assert.strictEqual(comResult.sslValid, false);
+
+      assert.strictEqual(requestedUrls[0], 'https://rdap.domreg.lt/domain/fresh-shop.lt');
+      assert.strictEqual(requestedUrls[1], 'https://rdap.org/domain/old-shop.com');
+    });
+  });
+
+  describe('SSRF hostname rejection', () => {
+    it('should reject localhost and loopback/private IP targets before calling fetch', async (t) => {
+      const validateMock = t.mock.method(Security, 'validateHostname', async () => ({ safe: true }));
+      const fetchMock = t.mock.method(globalThis, 'fetch', async () => {
+        throw new Error('fetch must not be called for SSRF targets');
+      });
+
+      for (const target of ['localhost', '127.0.0.1']) {
+        const result = await WhoisChecker.checkDomain(target);
+        assert.strictEqual(result.whoisError, 'SSRF_BLOCKED');
+        assert.strictEqual(result.isNewDomain, false);
+        assert.strictEqual(result.hasValidSsl, false);
+        assert.strictEqual(result.sslValid, false);
+        assert.ok(result.whoisWarning);
+      }
+
+      assert.strictEqual(validateMock.mock.callCount(), 0);
+      assert.strictEqual(fetchMock.mock.callCount(), 0);
+    });
+  });
+
+  describe('HTTP error, timeout, and network resilience', () => {
+    it('should return structured whoisWarning on HTTP 429 rate limit without throwing', async (t) => {
+      t.mock.method(Security, 'validateHostname', async () => ({ safe: true }));
+      t.mock.method(globalThis, 'fetch', async () => new Response('Too Many Requests', { status: 429 }));
+
+      const result = await WhoisChecker.checkDomain('unknown-shop.lt');
+      assert.strictEqual(result.whoisError, 'HTTP_429');
+      assert.ok(result.whoisWarning?.includes('Rate limited'));
+      assert.strictEqual(result.hasValidSsl, false);
+      assert.strictEqual(result.sslValid, false);
+    });
+
+    it('should return structured whoisWarning on HTTP 404 not found without throwing', async (t) => {
+      t.mock.method(Security, 'validateHostname', async () => ({ safe: true }));
+      t.mock.method(globalThis, 'fetch', async () => new Response('Not Found', { status: 404 }));
+
+      const result = await WhoisChecker.checkDomain('unregistered-shop.lt');
+      assert.strictEqual(result.whoisError, 'HTTP_404');
+      assert.ok(result.whoisWarning?.includes('nerastas'));
+      assert.strictEqual(result.hasValidSsl, false);
+      assert.strictEqual(result.sslValid, false);
+    });
+
+    it('should return structured whoisWarning on fetch network error without throwing', async (t) => {
+      t.mock.method(Security, 'validateHostname', async () => ({ safe: true }));
+      t.mock.method(globalThis, 'fetch', async () => {
+        throw Object.assign(new Error('connect ECONNRESET'), { code: 'ECONNRESET' });
+      });
+
+      const result = await WhoisChecker.checkDomain('unreachable-shop.lt');
+      assert.strictEqual(result.whoisError, 'ECONNRESET');
+      assert.ok(result.whoisWarning);
+      assert.strictEqual(result.hasValidSsl, false);
+      assert.strictEqual(result.sslValid, false);
+    });
+
+    it('should abort slow RDAP requests cleanly on timeout and return ETIMEDOUT', async (t) => {
+      t.mock.method(Security, 'validateHostname', async () => ({ safe: true }));
+      t.mock.timers.enable({ apis: ['setTimeout'] });
+      t.after(() => {
+        t.mock.timers.reset();
+      });
+
+      t.mock.method(globalThis, 'fetch', (_input: string | URL | Request, init?: RequestInit) => {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            'abort',
+            () => reject(new DOMException('Aborted', 'AbortError')),
+            { once: true },
+          );
+        });
+      });
+
+      const promise = WhoisChecker.checkDomain('slow-rdap.lt', { timeoutMs: 2500 });
+      await Promise.resolve();
+      t.mock.timers.tick(2500);
+
+      const result = await promise;
+      assert.strictEqual(result.whoisError, 'ETIMEDOUT');
+      assert.ok(result.whoisWarning?.includes('Timeout'));
+      assert.strictEqual(result.hasValidSsl, false);
+      assert.strictEqual(result.sslValid, false);
+    });
+  });
+});
+
 describe('AuditEngine.analyze', () => {
-  function mockCleanExternalChecks(t: TestContext, scrapedCompanyCode?: string) {
-    t.mock.method(WhoisChecker, 'checkDomain', async (domain: string) => ({
-      domain,
-      isHttps: true,
-      hasValidSsl: true,
-      sslValid: true,
-      registrationDate: '2018-01-01T00:00:00Z',
-      domainCreatedDate: '2018-01-01T00:00:00Z',
-      domainAgeDays: 2500,
-      domainAgeMonths: 83,
-      isNewDomain: false,
-    }));
+  interface MockExternalOverrides {
+    scrapedCompanyCode?: string;
+    ssl?: Partial<SslCertificateResult>;
+    whois?: {
+      domainAgeDays?: number;
+      domainAgeMonths?: number;
+      isNewDomain?: boolean;
+      whoisWarning?: string;
+      whoisError?: string;
+      registrationDate?: string;
+    };
+  }
+
+  function mockCleanExternalChecks(
+    t: TestContext,
+    scrapedCompanyCodeOrOverrides?: string | MockExternalOverrides,
+  ) {
+    const overrides: MockExternalOverrides =
+      typeof scrapedCompanyCodeOrOverrides === 'string'
+        ? { scrapedCompanyCode: scrapedCompanyCodeOrOverrides }
+        : (scrapedCompanyCodeOrOverrides ?? {});
+
+    t.mock.method(WhoisChecker, 'checkDomain', async (domain: string) => {
+      const hasCustomAge = overrides.whois !== undefined;
+      return {
+        domain,
+        isHttps: false,
+        hasValidSsl: false,
+        sslValid: false,
+        registrationDate: hasCustomAge ? overrides.whois?.registrationDate : '2018-01-01T00:00:00Z',
+        domainCreatedDate: hasCustomAge ? overrides.whois?.registrationDate : '2018-01-01T00:00:00Z',
+        domainAgeDays: hasCustomAge ? overrides.whois?.domainAgeDays : 2500,
+        domainAgeMonths: hasCustomAge ? overrides.whois?.domainAgeMonths : 83,
+        isNewDomain: overrides.whois?.isNewDomain ?? false,
+        whoisWarning: overrides.whois?.whoisWarning,
+        whoisError: overrides.whois?.whoisError,
+      };
+    });
 
     t.mock.method(SslChecker, 'checkCertificate', async () => ({
       hasValidSsl: true,
       sslValid: true,
       issuer: 'Test CA',
+      validFrom: '2025-01-01T00:00:00.000Z',
       validTo: '2027-01-01T00:00:00.000Z',
       isExpired: false,
       daysRemaining: 365,
       protocol: 'TLSv1.3',
       authorized: true,
+      selfSigned: false,
+      ...overrides.ssl,
     }));
 
     t.mock.method(WebScraper, 'analyzeWebsite', async () => ({
       legalEntity: {
-        found: Boolean(scrapedCompanyCode),
-        companyFound: Boolean(scrapedCompanyCode),
-        companyCode: scrapedCompanyCode,
-        isLithuanianOrEu: Boolean(scrapedCompanyCode),
+        found: Boolean(overrides.scrapedCompanyCode),
+        companyFound: Boolean(overrides.scrapedCompanyCode),
+        companyCode: overrides.scrapedCompanyCode,
+        isLithuanianOrEu: Boolean(overrides.scrapedCompanyCode),
       },
       consumerProtection: {
         hasReturnPolicy: true,
@@ -611,7 +1184,7 @@ describe('AuditEngine.analyze', () => {
     assert.strictEqual(result.blacklist.isVvtatBlocked, false);
   });
 
-  it('should score active VEIKIANTI entity as 100 with PASS legal-status checklist item (mocked network)', async (t) => {
+  it('should score active VEIKIANTI entity as 100 with PASS legal-status and ssl-security checklist items (mocked network)', async (t) => {
     mockCleanExternalChecks(t);
 
     const result = await AuditEngine.analyze('kalykla.lt');
@@ -622,6 +1195,99 @@ describe('AuditEngine.analyze', () => {
     const legalStatusCheck = result.checklist.find((item) => item.id === 'legal-status');
     assert.ok(legalStatusCheck);
     assert.strictEqual(legalStatusCheck.status, 'PASS');
+
+    const sslCheck = result.checklist.find((item) => item.id === 'ssl-security');
+    assert.ok(sslCheck);
+    assert.strictEqual(sslCheck.status, 'PASS');
+    assert.ok(sslCheck.description.includes('Test CA'));
+    assert.ok(sslCheck.description.includes('TLSv1.3'));
+  });
+
+  it('should deduct 15 points and set ssl-security to WARN for self-signed SSL certificates', async (t) => {
+    mockCleanExternalChecks(t, {
+      ssl: {
+        hasValidSsl: false,
+        sslValid: false,
+        authorized: false,
+        selfSigned: true,
+        issuer: 'Self-Signed CA',
+        errorCode: 'DEPTH_ZERO_SELF_SIGNED_CERT',
+        warning: 'Sertifikatas pasirašytas savarankiškai.',
+      },
+    });
+
+    const result = await AuditEngine.analyze('kalykla.lt');
+    assert.strictEqual(result.trustScore, 85);
+    assert.strictEqual(result.trustLevel, 'CAUTION');
+
+    const sslCheck = result.checklist.find((item) => item.id === 'ssl-security');
+    assert.ok(sslCheck);
+    assert.strictEqual(sslCheck.status, 'WARN');
+    assert.ok(sslCheck.description.includes('Self-Signed CA'));
+  });
+
+  it('should deduct 30 points and set ssl-security to FAIL for missing or expired SSL certificates', async (t) => {
+    mockCleanExternalChecks(t, {
+      ssl: {
+        hasValidSsl: false,
+        sslValid: false,
+        authorized: false,
+        selfSigned: false,
+        isExpired: true,
+        errorCode: 'CERT_HAS_EXPIRED',
+        warning: 'Sertifikato galiojimo laikas yra pasibaigęs.',
+      },
+    });
+
+    const result = await AuditEngine.analyze('kalykla.lt');
+    assert.strictEqual(result.trustScore, 70);
+    assert.strictEqual(result.trustLevel, 'CAUTION');
+
+    const sslCheck = result.checklist.find((item) => item.id === 'ssl-security');
+    assert.ok(sslCheck);
+    assert.strictEqual(sslCheck.status, 'FAIL');
+    assert.ok(sslCheck.description.includes('pasibaigęs'));
+  });
+
+  it('should deduct 25 points and set domain-age to WARN for new domains (< 90 days)', async (t) => {
+    mockCleanExternalChecks(t, {
+      whois: {
+        domainAgeDays: 30,
+        domainAgeMonths: 1,
+        isNewDomain: true,
+        registrationDate: new Date(Date.now() - 30 * 86_400_000).toISOString(),
+      },
+    });
+
+    const result = await AuditEngine.analyze('kalykla.lt');
+    assert.strictEqual(result.trustScore, 75);
+    assert.strictEqual(result.trustLevel, 'CAUTION');
+
+    const domainAgeCheck = result.checklist.find((item) => item.id === 'domain-age');
+    assert.ok(domainAgeCheck);
+    assert.strictEqual(domainAgeCheck.status, 'WARN');
+    assert.ok(domainAgeCheck.description.includes('30 d.'));
+  });
+
+  it('should set domain-age to INFO with 0 penalty when RDAP is unavailable', async (t) => {
+    mockCleanExternalChecks(t, {
+      whois: {
+        domainAgeDays: undefined,
+        domainAgeMonths: undefined,
+        isNewDomain: false,
+        whoisWarning: 'RDAP užklausų limitas viršytas (Rate limited)',
+        whoisError: 'HTTP_429',
+      },
+    });
+
+    const result = await AuditEngine.analyze('kalykla.lt');
+    assert.strictEqual(result.trustScore, 100);
+    assert.strictEqual(result.trustLevel, 'SAFE');
+
+    const domainAgeCheck = result.checklist.find((item) => item.id === 'domain-age');
+    assert.ok(domainAgeCheck);
+    assert.strictEqual(domainAgeCheck.status, 'INFO');
+    assert.ok(domainAgeCheck.description.includes('Rate limited'));
   });
 
   it('should deduct exactly 40 points and flag BANKRUTUOJANTI entity as FAIL (mocked network)', async (t) => {
