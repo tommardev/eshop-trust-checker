@@ -36,11 +36,19 @@ export interface DomainSecurityInfo {
   sslValid: boolean;
   sslIssuer?: string;
   sslValidUntil?: string;
+  validFrom?: string;
+  protocol?: string;
+  sslProtocol?: string;
+  sslError?: string;
+  sslWarning?: string;
+  selfSigned?: boolean;
   registrationDate?: string;
   domainCreatedDate?: string;
   domainAgeDays?: number;
   domainAgeMonths?: number;
   isNewDomain: boolean; // < 90 days / 3 months
+  whoisWarning?: string;
+  whoisError?: string;
 }
 
 export interface ConsumerProtectionInfo {
