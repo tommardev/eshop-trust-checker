@@ -56,6 +56,7 @@ All labels are pre-created in the GitHub repository. **Automations must never at
 
 | Label | Color | Description | Owner / Transition |
 | :--- | :--- | :--- | :--- |
+| `priority` | `#b60205` | High-priority issue selected ahead of regular backlog (ordered by lowest issue number). | Human / Issue triage |
 | `ready-for-plan` | `#1d76db` | Optional manual trigger to prioritize an issue for planning. | Human / Issue triage |
 | `planning-in-progress` | `#fbca04` | Mutual exclusion lock indicating a plan is being written. | Set by Planner; removed when plan pushed |
 | `plan-ready` | `#0e8a16` | Implementation plan committed and ready for execution. | Set by Planner; consumed by Implementer |
@@ -80,7 +81,7 @@ All labels are pre-created in the GitHub repository. **Automations must never at
        - **Core 1b**: If any open issue has `automation-failed`, `in-progress`, `planning-in-progress`, or `implemented`, exit immediately.
        - **Core 2**: If any open issue already has `plan-ready`, exit immediately.
   2. **Ensure `main` & Select Next Issue**:
-     - Pick the single oldest open issue from the Step 1 snapshot (favoring `ready-for-plan` if present, else lowest issue number). If none, exit cleanly.
+     - Pick the single oldest open issue from the Step 1 snapshot using strict priority tiers (`priority` + `ready-for-plan`, then `priority`, then `ready-for-plan`, then any open unplanned issue; lowest issue number / earliest `createdAt` wins within the highest tier). If none, exit cleanly.
      - Check `git symbolic-ref --short HEAD`: if not on `main` and `git status -s` is clean, run `git checkout main` (try sandbox first; `BypassSandbox: true` fallback if `.git` denies permission).
      - Run `git ls-files .agents/plans`: if `.agents/plans/issue-<number>-*.md` already exists on disk, add `plan-ready` (removing `ready-for-plan`) and exit immediately.
   3. **Claim Issue Early**:
@@ -107,7 +108,7 @@ All labels are pre-created in the GitHub repository. **Automations must never at
      - Check `gh pr list --state open --json number,title,url --limit 10`: If any open PR exists, exit immediately.
      - Fetch `gh issue list --state open --limit 100 --json number,title,url,createdAt,labels,body,comments`:
        - **Core 1b**: If any open issue has `automation-failed`, `in-progress`, `planning-in-progress`, or `implemented`, exit immediately.
-       - **Core 2**: Filter the snapshot for `plan-ready`. If no open issue has `plan-ready`, exit cleanly. Pick the single oldest `plan-ready` issue `<NUMBER>`.
+       - **Core 2**: Filter the snapshot for `plan-ready`. If no open issue has `plan-ready`, exit cleanly. Prefer `plan-ready` issues also labeled `priority` first; within the selected tier, pick the single oldest `plan-ready` issue `<NUMBER>`.
   2. **Claim Issue Early**:
      - Immediately swap `gh issue edit <NUMBER> --remove-label "plan-ready" --add-label "in-progress"` before reading `AGENTS.md`, plan files, or pulling `main`.
   3. **Ensure `main`, Sync Main & Load Plan**:
