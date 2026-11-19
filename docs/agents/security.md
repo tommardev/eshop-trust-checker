@@ -32,3 +32,11 @@ Because this application fetches external web pages submitted by untrusted users
 - `golden:` Never commit secrets, API keys, or private tokens to the git repository.
 - `repo:` Environment variables belong in `.env.local` (ignored by `.gitignore`).
 - `golden:` Never log credentials, API tokens, or personal data.
+
+## CI/CD Workflow Hardening (GitHub Actions)
+
+- `golden:` **Pin all GitHub Actions to full 40-char commit SHAs** (with `# vX.Y.Z` version comments) across every workflow — never rely on mutable tags (`@v4`, `@main`).
+- `golden:` **Least-privilege `permissions:`** at the workflow or job level (e.g. `contents: read`; grant `statuses: write` or `security-events: write` only where required).
+- `golden:` **Checkout safety:** Set `persist-credentials: false` on `actions/checkout` and never run `pull_request_target` on untrusted PR code.
+- `golden:` **Job timeouts:** Set explicit `timeout-minutes` on every job (e.g. `5`–`15` min) to prevent hung builds or probes.
+- `repo:` **Preview bypass secret safety:** Validate `deployment_status.target_url` (`https://` + expected preview host allowlist) before sending `x-vercel-protection-bypass` (`VERCEL_AUTOMATION_BYPASS_SECRET`).
