@@ -29,11 +29,16 @@ Unit test conventions (`repo:`) win. Golden defaults (`golden:`) guide coverage 
 
 ## Commands
 
-- Run type checking: `npx tsc --noEmit`
+- Run unit tests: `npm test` (runs `node --test` offline across `src/**/*.test.ts` and `src/**/*.spec.ts` on Node.js >=22.18.0)
+- Run type checking: `npx tsc --noEmit --incremental false`
 - Run linting: `npm run lint`
+- Run production build: `npm run build`
+
+> Note: `.agents/skills/piv-validate/SKILL.md` is gitignored via `.gitignore` (restored via `npx skills experimental_install --yes`), making `docs/agents/testing.md` and `docs/agents/stack.md` the committed canonical validation reference.
 
 ## Golden Rules
 
+- `repo:` All unit tests must mock external network, DNS, TLS, and HTTP calls (`WhoisChecker`, `SslChecker`, `WebScraper`, `Security.validateHostname`, `tls.connect`, `fetch`) so `npm test` runs deterministically offline in sandbox and CI.
 - `golden:` Unit tests at seams only. No heavy end-to-end framework unless explicitly requested in the plan.
 - `golden:` Do not delete failing tests to go green. Fix the root cause in the implementation.
 - `golden:` Test observable behavior and return contracts, not private class internals.

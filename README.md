@@ -49,7 +49,7 @@ Vartotojai, ieškodami prekių internete (pvz., perkant auksą, elektroniką, dr
 ## 🚀 Paleidimas ir Vystymas (Getting Started)
 
 ### Reikalavimai
-- Node.js 18+ arba 20+
+- Node.js 22.18+ arba 24 LTS
 - npm arba pnpm
 
 ### Komandos
@@ -67,10 +67,13 @@ npm run build
 # Paleisti produkcijos serverį
 npm run start
 
+# Paleisti vienetinius testus
+npm test
+
 # Paleisti linterį
 npm run lint
 
-# Paleisti TypeScript tipo patikrą
+# Paleisti TypeScript tipo patikrą (švariai CI patikrai: npx tsc --noEmit --incremental false)
 npx tsc --noEmit
 ```
 
