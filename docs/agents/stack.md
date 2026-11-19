@@ -9,7 +9,7 @@ Languages, frameworks, runtimes, and dependencies for `eshop-trust-checker`.
   - Module resolution: `bundler`
   - Strict type checking enabled (`strict: true`, `noEmit: true`)
   - Path alias: `@/*` → `./src/*`
-- **Node.js:** Node.js 18+ / 20+ runtime (`@types/node`: ^20.17.0)
+- **Node.js:** Node.js 22.18+ / 24 LTS runtime (unflagged native TypeScript execution for `node --test`; `@types/node`: ^20.17.0 — keep aligned if `@types/node` is upgraded later)
 
 ## Framework & UI (Planned / Configured)
 
@@ -29,8 +29,11 @@ Languages, frameworks, runtimes, and dependencies for `eshop-trust-checker`.
 
 - Install dependencies: `npm install`
 - Development server: `npm run dev`
+- Run unit tests: `npm test`
+- Typecheck: `npx tsc --noEmit --incremental false` (clean non-incremental check for CI/validation; `npx tsc --noEmit` also works locally)
+- Lint code: `npm run lint`
 - Build application: `npm run build`
 - Start production server: `npm run start`
-- Lint code: `npm run lint`
-- Typecheck: `npx tsc --noEmit`
 - Restore agent skills: `npx skills experimental_install --yes`
+
+> Note: `.agents/skills/piv-validate/SKILL.md` is gitignored via `.gitignore` (restored locally with `npx skills experimental_install --yes`), so `docs/agents/stack.md` and `docs/agents/testing.md` remain the committed source of truth.

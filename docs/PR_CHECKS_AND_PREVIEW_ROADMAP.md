@@ -31,7 +31,7 @@ Step-by-step, agent-iterable checklist to eliminate missing GitHub PR checks, fi
 
 Fix these mismatches first so GitHub Actions does not fail immediately or silently skip tests.
 
-- [ ] **1.1 Align Node.js runtime version across docs and `package.json`**
+- [x] **1.1 Align Node.js runtime version across docs and `package.json`**
   - **Why:** `npm test` runs `node --test src/lib/__tests__/checkers.test.ts`, which imports `.ts` files directly (`tsconfig.json` `allowImportingTsExtensions: true`). Unflagged `.ts` execution requires Node `>= 22.18` (or Node `24` LTS), whereas `README.md` and `docs/agents/stack.md` list Node `18+ / 20+`.
   - **Files:** `package.json`, `README.md`, `docs/agents/stack.md`
   - **Steps:**
@@ -39,7 +39,7 @@ Fix these mismatches first so GitHub Actions does not fail immediately or silent
     2. Update Node runtime requirements in `README.md` and `docs/agents/stack.md` to Node `22.18+` / `24 LTS` (and note `@types/node` alignment if upgraded later).
   - **Verify:** `node -v` satisfies `>= 22.18.0` and `npm test` exits `0`.
 
-- [ ] **1.2 Update `npm test` for multi-file test discovery**
+- [x] **1.2 Update `npm test` for multi-file test discovery**
   - **Why:** `package.json` (`scripts.test`) runs only a single file (`src/lib/__tests__/checkers.test.ts`). Any new `*.test.ts` or `*.spec.ts` files (per `AGENTS.md` and `docs/agents/testing.md`) will be skipped in CI.
   - **Files:** `package.json`, `docs/agents/testing.md`, `docs/agents/stack.md`
   - **Steps:**
@@ -47,7 +47,7 @@ Fix these mismatches first so GitHub Actions does not fail immediately or silent
     2. Add `npm test` to the Commands section in `docs/agents/testing.md` and `docs/agents/stack.md`.
   - **Verify:** Run `npm test` locally and confirm all suites in `src/lib/__tests__/checkers.test.ts` execute and pass.
 
-- [ ] **1.3 Ensure all unit tests run deterministically offline**
+- [x] **1.3 Ensure all unit tests run deterministically offline**
   - **Why:** On `main`, `AuditEngine.analyze` tests in `src/lib/__tests__/checkers.test.ts` hit live external domains (`kalykla.lt`, `pigu.lt`) via WHOIS/RDAP, TLS, and HTTP scraping, which can flake or time out in CI. (PR `#11` addresses this with mocks.)
   - **Files:** `src/lib/__tests__/checkers.test.ts` (and optional `*.mock.ts` / `*.data.ts` fixtures per `docs/agents/testing.md`)
   - **Steps:**
@@ -55,7 +55,7 @@ Fix these mismatches first so GitHub Actions does not fail immediately or silent
     2. Mock `WhoisChecker.checkDomain`, `SslChecker.checkCertificate`, `WebScraper.analyzeWebsite`, and `fetch` in unit tests (using `node:test` `mock.method` and `try/finally` restore).
   - **Verify:** `npm test` passes with zero external network calls.
 
-- [ ] **1.4 Replace template placeholders in `piv-validate` skill**
+- [x] **1.4 Replace template placeholders in `piv-validate` skill**
   - **Why:** `.agents/skills/piv-validate/SKILL.md` still has `# REPLACE:` placeholders instead of this repo's real checks.
   - **Files:** `.agents/skills/piv-validate/SKILL.md` *(gitignored locally via `.gitignore`)*, `AGENTS.md` / `docs/agents/testing.md`
   - **Steps:**
@@ -255,3 +255,4 @@ Add these once UI components (`#7`, `#8`), `/api/check` (`#6`), and test suite (
 | Date | Task ID | Branch / PR | Result / Notes |
 | :--- | :--- | :--- | :--- |
 | _YYYY-MM-DD_ | _e.g. 1.1_ | _branch or PR #_ | _Summary of verification and remaining notes_ |
+| 2026-11-19 | 1.1–1.4 | `feat/issue-13-ci-prep` (Issue #13) | Aligned `engines.node` (`>=22.18.0`), multi-file `npm test` globs (`src/**/*.test.ts` / `src/**/*.spec.ts`), validation docs (`README.md`, `stack.md`, `testing.md`), and offline mock checks; verified on Node `v24.20.0` (`npm test`: 100/100 pass, `tsc`, `lint`, `build`). |
