@@ -6,7 +6,7 @@
 
 `eshop-trust-checker` is an automated Lithuanian e-commerce trust and compliance audit engine. It evaluates online shops against VVTAT 5 golden consumer rules, official court-ordered blocked domain lists, state enterprise registry (JAR) company code validation via Modulo 11, domain age (WHOIS/RDAP), and HTML scraping for legal disclosures and return policies.
 
-**Stack:** Next.js 14.2.15 (App Router), React 18.3.1, TypeScript 5.6.3, Tailwind CSS 3.4.14, Cheerio 1.0.0.
+**Stack:** Next.js 15.5.29 (App Router), React 18.3.1, TypeScript 5.6.3, Tailwind CSS 3.4.14, Cheerio 1.0.0.
 
 ## Precedence
 

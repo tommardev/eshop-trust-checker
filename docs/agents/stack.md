@@ -13,9 +13,9 @@ Languages, frameworks, runtimes, and dependencies for `eshop-trust-checker`.
 
 ## Framework & UI (Planned / Configured)
 
-- **Framework:** Next.js 14.2.15 (App Router architecture)
+- **Framework:** Next.js 15.5.29 (App Router architecture)
 - **UI Runtime:** React 18.3.1, React DOM 18.3.1
-- **Styling:** Tailwind CSS 3.4.14, PostCSS 8.4.47, Autoprefixer 10.4.20
+- **Styling:** Tailwind CSS 3.4.14, PostCSS 8.5.29, Autoprefixer 10.4.20
 - **Utility Libraries:** `clsx` 2.1.1, `tailwind-merge` 2.5.4
 - **Icons:** `lucide-react` 0.453.0
 
