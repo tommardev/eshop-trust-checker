@@ -5,15 +5,19 @@ out/
 build/
 dist/
 *.tsbuildinfo
+next-env.d.ts
+coverage/
+.vercel
 
 # Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Environment variables
+# Environment variables & keys
 .env*.local
 .env
+*.pem
 
 # OS Files
 .DS_Store
