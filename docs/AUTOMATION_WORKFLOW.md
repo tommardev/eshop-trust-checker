@@ -77,7 +77,7 @@ All labels are pre-created in the GitHub repository. **Automations must never at
 - **Execution Flow**:
   1. **Pre-flight Guard Check (Core 1 + Core 2)**:
      - Check `gh pr list --state open --json number,title,url --limit 10`: If any open PR exists, exit immediately.
-     - Fetch `gh issue list --state open --limit 100 --json number,title,labels,createdAt,body,url`:
+     - Fetch `gh issue list --state open --limit 100 --json number,title,labels,createdAt,body,comments,url`:
        - **Core 1b**: If any open issue has `automation-failed`, `in-progress`, `planning-in-progress`, or `implemented`, exit immediately.
        - **Core 2**: If any open issue already has `plan-ready`, exit immediately.
   2. **Ensure `main` & Select Next Issue**:
