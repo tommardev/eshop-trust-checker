@@ -1,5 +1,11 @@
 # E-Shop Trust & Eligibility Checker (Patikima Parduotuvė)
 
+[![Live App](https://img.shields.io/badge/Live%20App-Vercel-000000?logo=vercel&logoColor=white)](https://eshop-trust-checker.vercel.app)
+[![Next.js](https://img.shields.io/badge/Next.js-15.5-000000?logo=next.js&logoColor=white)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.18-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-3.4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+
 > Automatinis el. parduotuvių ir svetainių patikimumo, saugumo bei teisinės atitikties tikrintuvas, besiremiantis oficialiais Lietuvos ir ES šaltiniais (VVTAT, Registrų Centras, Lietuvos Bankas, WHOIS/DOMREG).
 
 ## 🎯 Projekto Idėja ir Tikslas

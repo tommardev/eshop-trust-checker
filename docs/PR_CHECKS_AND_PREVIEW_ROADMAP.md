@@ -132,7 +132,7 @@ Give reviewers and stakeholders a live URL for every feature PR and `main` while
     2. Gate `POST /api/sync-blacklist` behind an optional `SYNC_BLACKLIST_SECRET` header check (configured via hosting env vars + `.env.example`, never committed to git) until Issue `#6` rate limiting is merged.
   - **Verify:** Unauthorized callers cannot abuse `/api/sync-blacklist` on preview URLs.
 
-- [ ] **3.3 Connect hosting provider & PR preview workflow**
+- [x] **3.3 Connect hosting provider & PR preview workflow** *(Completed: Vercel GitHub App connected — live at `https://eshop-trust-checker.vercel.app`)*
   - **Files:** GitHub App integration (Vercel / Netlify — default) or `.github/workflows/preview.yml` (fallback CLI deploy only)
   - **Steps:**
     1. **Default (tokenless):** Connect `tommardev/eshop-trust-checker` via the official **Vercel** (recommended) or **Netlify** GitHub App so `main` and every PR auto-deploy via GitHub Deployments with **zero deploy tokens** stored in GitHub Secrets.
@@ -256,3 +256,4 @@ Add these once UI components (`#7`, `#8`), `/api/check` (`#6`), and test suite (
 | :--- | :--- | :--- | :--- |
 | _YYYY-MM-DD_ | _e.g. 1.1_ | _branch or PR #_ | _Summary of verification and remaining notes_ |
 | 2026-11-19 | 1.1–1.4 | `feat/issue-13-ci-prep` (Issue #13) | Aligned `engines.node` (`>=22.18.0`), multi-file `npm test` globs (`src/**/*.test.ts` / `src/**/*.spec.ts`), validation docs (`README.md`, `stack.md`, `testing.md`), and offline mock checks; verified on Node `v24.20.0` (`npm test`: 100/100 pass, `tsc`, `lint`, `build`). |
+| 2026-11-23 | 3.3 | Manual / Vercel | Connected Vercel GitHub App (`https://eshop-trust-checker.vercel.app`) with automatic PR previews; recorded in `docs/agents/stack.md` and commented on Issue #15. |

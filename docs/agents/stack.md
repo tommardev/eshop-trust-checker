@@ -25,6 +25,12 @@ Languages, frameworks, runtimes, and dependencies for `eshop-trust-checker`.
 - **Network & Fetch:** Native `fetch` with `AbortController` (timeouts: 2.5s–4s)
 - **Data & Caches:** Local static JSON cache in `src/data/vvtat-blocked-cache.json`
 
+## Hosting & Deployment
+
+- **Platform:** Vercel (GitHub App already connected to `tommardev/eshop-trust-checker`)
+- **Production URL:** `https://eshop-trust-checker.vercel.app`
+- **PR Previews:** Enabled automatically via Vercel GitHub integration (Roadmap Task `3.3` is complete; do not prompt the user to connect hosting again).
+
 ## Commands
 
 - Install dependencies: `npm install`
