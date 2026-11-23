@@ -1,0 +1,51 @@
+name: Bug Report
+description: Report a bug with reproduction steps and regression test criteria
+title: "fix: "
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Short description of the bug and its impact.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction Steps
+      description: Exact inputs, domain, or command to reproduce.
+      placeholder: |
+        1. Run audit on `...`
+        2. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_actual
+    attributes:
+      label: Expected vs. Actual Behavior
+      description: What should happen vs. what happens today.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope_seams
+    attributes:
+      label: Likely Files / Seams
+      description: Relevant modules or routes, if known.
+      placeholder: |
+        - `src/lib/...`
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: What verifies the fix (including offline regression unit test).
+      value: |
+        - [ ] Root cause fixed
+        - [ ] Offline unit regression test added
+    validations:
+      required: true

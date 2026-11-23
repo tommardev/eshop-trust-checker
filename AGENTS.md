@@ -86,6 +86,7 @@ src/
 
 - Commit message style: Conventional Commits (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`).
 - Keep changes surgical and atomic.
+- Non-trivial features, refactors, bugs, and follow-up work go to GitHub Issues first (`gh issue create`); link PRs with `Closes #<N>`. Read `docs/agents/planning.md`.
 
 ## Pointers
 
@@ -93,6 +94,7 @@ This file is the index. Helpers are not always-on. Before you edit an area, **Re
 
 | When you are editing                                    | Read first                      |
 | ------------------------------------------------------- | ------------------------------- |
+| Planning, backlog, or GitHub Issues                     | `docs/agents/planning.md`       |
 | Stack, dependencies, or versions                        | `docs/agents/stack.md`          |
 | Module layout, imports, naming, or seams                | `docs/agents/conventions.md`    |
 | Audit orchestration, scraping, or code patterns         | `docs/agents/best-practices.md` |

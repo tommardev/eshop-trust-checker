@@ -1,0 +1,64 @@
+name: Feature / Planning Task
+description: AI-ready spec for a new feature, refactor, or backlog slice (1 issue = 1 PR)
+title: "feat: "
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What user or system problem does this solve? (1-3 sentences)
+      placeholder: Users need...
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: Verifiable checklist of what "done" looks like.
+      value: |
+        - [ ] 
+        - [ ] 
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope_seams
+    attributes:
+      label: Scope & Seams
+      description: Likely files/modules and relevant docs/agents/*.md helpers.
+      placeholder: |
+        - Files: `src/lib/...`, `src/types/audit.ts`
+        - Helpers: `docs/agents/conventions.md`, `docs/agents/testing.md`
+    validations:
+      required: true
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints
+      description: Security (SSRF, timeouts), performance, offline test mocking, or compatibility rules.
+      placeholder: |
+        - HTTP timeout <= 4000ms
+        - Unit tests must run offline with mocked network calls
+    validations:
+      required: false
+
+  - type: input
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: List blocking issues (e.g. "Depends on #12") or "None".
+      value: "None"
+    validations:
+      required: false
+
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of Scope
+      description: Explicitly state what must NOT be changed in this issue.
+      placeholder: |
+        - Do not change scoring weights in AuditEngine
+    validations:
+      required: false
