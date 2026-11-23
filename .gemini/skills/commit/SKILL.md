@@ -1,4 +1,5 @@
 ---
+name: commit
 description: Create an atomic commit for current changes
 ---
 

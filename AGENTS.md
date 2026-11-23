@@ -85,6 +85,7 @@ src/
 ## Git / PRs
 
 - Commit message style: Conventional Commits (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`).
+- Follow `.agents/commands/commit.md` for commits (include a `Context:` section whenever `AGENTS.md`, `docs/`, or `.agents/` assets change).
 - Keep changes surgical and atomic.
 - Non-trivial features, refactors, bugs, and follow-up work go to GitHub Issues first (`gh issue create`); link PRs with `Closes #<N>`. Read `docs/agents/planning.md`.
 
