@@ -15,14 +15,22 @@ yarn-debug.log*
 yarn-error.log*
 
 # Environment variables & keys
-.env*.local
-.env
+.env*
+!.env.example
 *.pem
+*.key
+*.p12
+*.pfx
+*.crt
 
 # OS Files
 .DS_Store
 Thumbs.db
 
-# Installed agent skills (restore with: npx skills experimental_install --yes)
+# Installed agent skills & local worktrees/state (restore skills with: npx skills experimental_install --yes)
 .agents/skills/
+.agents/scratch/
 .claude/skills
+.claude/settings.local.json
+worktrees/
+.gh-*-body.md

@@ -115,7 +115,7 @@ export interface TrustAuditResult {
 ## 4. Projekto Katalogų Struktūra (Folder Structure)
 
 ```text
-D:\Workplace\_FastSimple\eshop-trust-checker\
+eshop-trust-checker/
 ├── docs/
 │   ├── PRD.md
 │   ├── ARCHITECTURE.md
