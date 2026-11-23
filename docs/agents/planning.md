@@ -37,6 +37,7 @@ Every planning issue must be self-contained so either a human, interactive agent
 - `repo:` **Auto-pickup awareness:** The Planner sidecar (`docs/AUTOMATION_WORKFLOW.md`) picks open unplanned issues in priority order (`priority` + `ready-for-plan` → `priority` → `ready-for-plan` → any open unplanned issue, oldest first).
   - Do **not** open vague half-baked draft issues in GitHub if you do not want the Planner sidecar to pick them up.
   - When creating a chain of dependent issues (`Depends on #<N>`), create prerequisite issues first (lower issue numbers) so FIFO ordering respects dependencies.
+  - *Deferred option:* If you later want an explicit opt-in gate (requiring `ready-for-plan`), see `docs/decisions/001-autonomous-queue-opt-in-gate.md`.
 
 ## Plans, Branches & PRs
 
