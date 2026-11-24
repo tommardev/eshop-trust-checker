@@ -2,7 +2,13 @@
   "name": "eshop-trust-checker",
   "version": "0.1.1",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "Lithuanian E-Shop Security and Eligibility Verification Web App based on VVTAT and State Registers",
+  "homepage": "https://eshop-trust-checker.vercel.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tommardev/eshop-trust-checker.git"
+  },
   "engines": {
     "node": ">=22.18.0"
   },
