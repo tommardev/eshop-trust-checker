@@ -16,7 +16,7 @@
 To protect users and deployed instances while a fix is prepared, report suspected vulnerabilities privately through:
 
 - **Primary channel:** [GitHub Private Vulnerability Reporting](https://github.com/tommardev/eshop-trust-checker/security/advisories/new)
-- **Fallback contact:** If the private advisory form is unavailable, reach out to the maintainer (`@tommardev`) via GitHub at [https://github.com/tommardev](https://github.com/tommardev) to arrange a private disclosure channel.
+- **Fallback contact:** If the private advisory form is unavailable, reach out to the maintainer (`@tommardev`) via GitHub at [https://github.com/tommardev](https://github.com/tommardev) or open a minimal contact-request issue in [GitHub Issues](https://github.com/tommardev/eshop-trust-checker/issues) asking to arrange a private disclosure channel (**never** include exploit details or vulnerability specifics in a public issue).
 
 Please include the following details in your report:
 

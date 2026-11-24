@@ -30,7 +30,7 @@ const GOVERNANCE_FILES = [
 ] as const;
 
 const RAW_EMAIL_PATTERN = /@[a-z0-9.-]+\.[a-z]{2,}/i;
-const PLACEHOLDER_MARKER = '[INSERT';
+const PLACEHOLDER_PATTERN = /\[INSERT|<year>|<name of author>/i;
 
 function resolveRepoPath(relativePath: string): string {
   return path.resolve(REPO_ROOT, relativePath);
@@ -109,6 +109,7 @@ describe('public repository governance and readiness', () => {
       'SECURITY.md',
       'CODE_OF_CONDUCT.md',
       'CONTRIBUTING.md',
+      'README.md',
     ] as const;
 
     for (const file of markdownPolicyFiles) {
@@ -119,24 +120,41 @@ describe('public repository governance and readiness', () => {
         `${file} must not expose raw private email addresses`,
       );
       assert.strictEqual(
-        content.includes(PLACEHOLDER_MARKER),
+        PLACEHOLDER_PATTERN.test(content),
         false,
-        `${file} must not contain leftover ${PLACEHOLDER_MARKER} template placeholders`,
+        `${file} must not contain leftover template placeholders`,
       );
     }
 
     const commercialLicense = readRepoText('COMMERCIAL_LICENSE.md');
-    assert.ok(commercialLicense.includes('AGPL-3.0'));
+    assert.ok(commercialLicense.includes('Copyright (c) 2026 tommardev'));
+    assert.ok(commercialLicense.includes('AGPL-3.0-only'));
     assert.ok(commercialLicense.includes('https://github.com/tommardev'));
 
     const securityPolicy = readRepoText('SECURITY.md');
     assert.ok(securityPolicy.includes('security/advisories/new'));
     assert.ok(securityPolicy.includes('SSRF'));
     assert.ok(securityPolicy.includes('Supported Versions'));
+    assert.ok(
+      securityPolicy.includes('minimal contact-request issue'),
+      'SECURITY.md must document the safe contact-request issue fallback',
+    );
+    assert.ok(
+      /never.*include exploit details/i.test(securityPolicy),
+      'SECURITY.md must warn against including exploit details in a public issue',
+    );
 
     const codeOfConduct = readRepoText('CODE_OF_CONDUCT.md');
     assert.ok(codeOfConduct.includes('Contributor Covenant'));
     assert.ok(codeOfConduct.includes('2.1'));
+    assert.ok(
+      codeOfConduct.includes('minimal contact-request issue'),
+      'CODE_OF_CONDUCT.md must document the safe contact-request issue fallback',
+    );
+    assert.ok(
+      codeOfConduct.includes('do not include confidential incident details'),
+      'CODE_OF_CONDUCT.md must warn against posting confidential incident details in a public issue',
+    );
 
     const contributing = readRepoText('CONTRIBUTING.md');
     const requiredContributingTokens = [
@@ -146,6 +164,9 @@ describe('public repository governance and readiness', () => {
       'npx tsc --noEmit --incremental false',
       'npm run lint',
       'npm run build',
+      'AGPL-3.0-only',
+      'COMMERCIAL_LICENSE.md',
+      'sublicense',
     ] as const;
 
     for (const token of requiredContributingTokens) {
@@ -172,18 +193,27 @@ describe('public repository governance and readiness', () => {
   it('README.md includes governance pointers and Phase-A badges without premature workflow badges', () => {
     const readme = readRepoText('README.md');
 
-    const expectedGovernanceTargets = [
-      '(LICENSE)',
-      '(COMMERCIAL_LICENSE.md)',
-      '(SECURITY.md)',
-      '(CONTRIBUTING.md)',
-      '(CODE_OF_CONDUCT.md)',
+    assert.ok(
+      readme.includes('Copyright (c) 2026 tommardev'),
+      'README.md must include Copyright (c) 2026 tommardev',
+    );
+    assert.ok(
+      readme.includes('AGPL-3.0-only'),
+      'README.md must explicitly mention AGPL-3.0-only',
+    );
+
+    const expectedGovernanceLinkPatterns = [
+      /\[[^\]]+\]\(LICENSE\)/,
+      /\[[^\]]+\]\(COMMERCIAL_LICENSE\.md\)/,
+      /\[[^\]]+\]\(SECURITY\.md\)/,
+      /\[[^\]]+\]\(CONTRIBUTING\.md\)/,
+      /\[[^\]]+\]\(CODE_OF_CONDUCT\.md\)/,
     ] as const;
 
-    for (const target of expectedGovernanceTargets) {
+    for (const pattern of expectedGovernanceLinkPatterns) {
       assert.ok(
-        readme.includes(target),
-        `README.md must link to ${target}`,
+        pattern.test(readme),
+        `README.md must contain a markdown link matching ${pattern}`,
       );
     }
 

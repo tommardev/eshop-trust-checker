@@ -122,8 +122,10 @@ Pastebėję saugumo spragą, **neatidarykite viešo GitHub Issue**. Apie pažeid
 
 ## 📄 Licencija (License)
 
+Copyright (c) 2026 tommardev. All rights reserved.
+
 Šis projektas platinamas pagal dvigubos licencijos (**Dual-License**) modelį:
 
-- **Atvirasis kodas:** [**GNU AGPL-3.0**](LICENSE) — laisvam naudojimui, modifikavimui ir savarankiškam talpinimui laikantis GNU Affero General Public License v3.0 sąlygų.
-- **Komercinė licencija:** [**Commercial License**](COMMERCIAL_LICENSE.md) — uždarojo kodo ar komerciniam naudojimui už AGPL-3.0 sąlygų ribų (suteikiama atskiru rašytiniu susitarimu).
+- **Atvirasis kodas:** [**GNU AGPL-3.0-only (Version 3.0 only)**](LICENSE) — laisvam naudojimui, modifikavimui ir savarankiškam talpinimui laikantis GNU Affero General Public License v3.0 only (`AGPL-3.0-only`) sąlygų.
+- **Komercinė licencija:** [**Commercial License**](COMMERCIAL_LICENSE.md) — uždarojo kodo ar komerciniam naudojimui už `AGPL-3.0-only` sąlygų ribų (suteikiama atskiru rašytiniu susitarimu).
 

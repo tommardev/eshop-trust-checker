@@ -36,7 +36,7 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement by contacting the project maintainer via GitHub (https://github.com/tommardev). All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement by contacting the project maintainer via GitHub (https://github.com/tommardev) or by opening a minimal contact-request issue in https://github.com/tommardev/eshop-trust-checker/issues asking to establish a private communication channel (do not include confidential incident details or personal information in a public issue). All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the reporter of any incident.
 

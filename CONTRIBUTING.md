@@ -68,4 +68,7 @@ This repository uses **Conventional Commits** and automated Pre-1.0 (`0.MINOR.PA
 
 ## Licensing Note
 
-By submitting a contribution via Pull Request, you agree that your contributions are licensed under the project's open-source license in [`LICENSE`](LICENSE) (GNU AGPL-3.0). See [`COMMERCIAL_LICENSE.md`](COMMERCIAL_LICENSE.md) for information about separate commercial licensing.
+By submitting a contribution (including pull requests, code, or documentation) to this repository, you certify that you have the right to submit it and you grant the copyright holder (`tommardev`) a perpetual, worldwide, non-exclusive, royalty-free, irrevocable license to use, modify, redistribute, and sublicense your contribution under both:
+
+1. The GNU Affero General Public License v3.0 only (`AGPL-3.0-only`, see [`LICENSE`](LICENSE)), and
+2. Any separate commercial or proprietary license offered by the copyright holder (see [`COMMERCIAL_LICENSE.md`](COMMERCIAL_LICENSE.md)).
