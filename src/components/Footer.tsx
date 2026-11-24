@@ -1,7 +1,10 @@
 import React from 'react';
 import { Shield, BookOpen, AlertTriangle } from 'lucide-react';
+import { getAppVersion } from '@/lib/app-version';
 
 export const Footer: React.FC = () => {
+  const appVersion = getAppVersion();
+
   return (
     <footer className="mt-auto border-t border-slate-200 bg-white py-8 text-slate-600">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -67,7 +70,11 @@ export const Footer: React.FC = () => {
         </div>
 
         <div className="mt-8 border-t border-slate-100 pt-4 text-center text-xs text-slate-500">
-          © {new Date().getFullYear()} E-Shop Trust Checker. Parengta pagal LR teisės aktus ir VVTAT gaires.
+          © {new Date().getFullYear()} E-Shop Trust Checker ·{' '}
+          <span className="font-mono" aria-label={`Programos versija ${appVersion}`}>
+            {appVersion}
+          </span>
+          . Parengta pagal LR teisės aktus ir VVTAT gaires.
         </div>
       </div>
     </footer>

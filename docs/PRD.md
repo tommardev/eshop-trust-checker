@@ -1,7 +1,7 @@
 # Product Requirements Document (PRD)
 
 ## Projekto Pavadinimas: E-Shop Trust & Eligibility Checker (`eshop-trust-checker`)
-**Versija**: 1.0.0 (MVP)  
+**Dokumento versija (PRD revizija)**: 1.0.0 (MVP) *(programinės įrangos SemVer versija sekama `package.json` faile pagal `0.MINOR.PATCH`)*  
 **Statusas**: Draft / Planavimas  
 **Data**: 2026-09-25  
 

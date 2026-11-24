@@ -1,0 +1,35 @@
+# Wave-controlled Pre-1.0 release automation (docs/AUTOMATION_WORKFLOW.md).
+# - On push to main: skips opening Release PRs (zero standing PRs blocking Core 1a sidecars),
+#   but still runs manifest.createReleases() when a merged Release PR is pushed.
+# - On workflow_dispatch: opens or updates the consolidated Release PR on demand.
+# - For planned minor waves (e.g. 0.2.0): push an empty commit on main with footer
+#   "Release-As: 0.2.0" before triggering workflow_dispatch.
+name: Release Please
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+concurrency:
+  group: release-please-main
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  release-please:
+    name: Release Please
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          skip-github-pull-request: ${{ github.event_name == 'push' }}

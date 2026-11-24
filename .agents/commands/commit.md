@@ -37,8 +37,16 @@ Write an atomic commit message with a conventional commit tag:
 - `refactor:` — Code restructure without behavior change
 - `docs:` — Documentation only
 - `test:` — Test additions or fixes
-- `chore:` — Build, CI, tooling changes
+- `chore:` — Build, tooling, or maintenance changes
+- `ci:` — CI/CD workflow changes
 - `perf:` — Performance improvement
+- `style:` — Code style or formatting only (no logic change)
+
+**Pre-1.0 SemVer Impact (release-please):**
+- `feat:` / `fix:` → **PATCH** bump (`0.1.0` → `0.1.1`)
+- `chore:`, `docs:`, `ci:`, `test:`, `refactor:`, `perf:`, `style:` → **no version bump**
+- **Forbidden unless explicitly requested by a human:** `!` (e.g. `feat!:`), `BREAKING CHANGE:` footers (trigger a Pre-1.0 MINOR bump), and `Release-As:` footers (reserved for human-initiated wave milestones).
+- **Never manually bump** `"version"` in `package.json`, `package-lock.json`, `.release-please-manifest.json`, or hand-edit `CHANGELOG.md` in feature/fix commits.
 
 **Scope guidelines:**
 Use a concise domain or module scope (e.g., package or subsystem):

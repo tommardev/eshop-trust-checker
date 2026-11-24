@@ -150,6 +150,14 @@ If a run encounters a compilation or execution failure:
 - After a human reviews, validates, and merges the PR into `main` (closing the PR), the next scheduled run resumes the pipeline for the next issue.
 - If a PR requires manual tweaks, commit to the PR branch directly before merging.
 
+### Release Automation Coexistence (release-please)
+- **Zero Standing PRs on `push`:** `.github/workflows/release-please.yml` passes `skip-github-pull-request: ${{ github.event_name == 'push' }}`, so ordinary merges to `main` never open a standing Release PR and never deadlock Core 1a (`gh pr list --state open`).
+- **On-Demand Wave Release PR (`workflow_dispatch`):** Running `Release Please` via `workflow_dispatch` opens or updates a single `chore(main): release 0.X.Y` PR updating `package.json`, `package-lock.json`, `.release-please-manifest.json`, `CHANGELOG.md`, and `README.md`. While this Release PR is open, Core 1a intentionally pauses Planner and Implementer sidecars until a human reviews and merges it; the merge `push` then runs `manifest.createReleases()` to create the `v0.X.Y` git tag and GitHub Release, and sidecars resume automatically.
+- **Verified Wave-Bump Procedure (`0.2.0`, `0.3.0`, `0.5.0`):** Because `release-please-action` ignores the `release-as` action input in manifest mode, push an empty commit on `main` before triggering `workflow_dispatch`:
+  `git commit --allow-empty -m "chore: release 0.2.0" -m "Release-As: 0.2.0"`
+- **Repository Settings & `#32` Ruleset Note:** Enable `Settings -> Actions -> General -> Allow GitHub Actions to create and approve pull requests`. Because PRs authored with the default `GITHUB_TOKEN` do not trigger `on: pull_request` workflows (preventing recursive runs), once `#32` enforces required status checks on `main`, either close & reopen the Release PR (or push an update as a human) to trigger CI checks, or configure a dedicated PAT/GitHub App token secret later.
+- **Commit Context Reminder:** Include a `Context:` block in commit messages whenever `AGENTS.md`, `docs/`, or `.agents/` files change (per `.agents/commands/commit.md`).
+
 ### Access Grants & Windows Sandbox Notes
 - Neither sidecar requests or requires `command(gh label create)`. All required access grants are strictly scoped to `gh issue`, `gh pr`, `git`, `npx tsc`, `npm test`, `npm run lint`, `npm run build`, `command(regex:npm --prefix (?:[^ ]*/)?worktrees/[^/ ]+ (test|run build|run lint))`, and local workspace operations.
 - **Windows Sandbox & Worktrees**: Creating a worktree writes inside `.git/worktrees`, which Windows sandbox denies by default; creating/removing/committing in `worktrees/` and running `next build` inside it may require `BypassSandbox: true` fallback (already covered by `access_grants`), while `npx tsc ... --incremental false`, `npm --prefix worktrees/... run lint` (`eslint --ext .ts,.tsx src`), and `npm --prefix worktrees/... test` run cleanly inside `BypassSandbox: false`.
