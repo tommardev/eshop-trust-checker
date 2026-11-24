@@ -117,15 +117,15 @@
       "source": "addyosmani/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/ci-cd-and-automation/SKILL.md",
-      "computedHash": "7be96fc2a6cc3d8d769d5769b9024d41a4b40f502372b34bf4438b7056e5b2b9",
-      "commit": "8c99fa36d90068c82d547f7c12a9d67a3e95f4ee"
+      "computedHash": "307f1eeee27c29693dd6b229b1706f6a867eef5a7f381d4d6f06736a4c230576",
+      "commit": "e997ac5b9a74eab332d5e9793bb38a38c8cfdd74"
     },
     "code-review-and-quality": {
       "source": "addyosmani/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/code-review-and-quality/SKILL.md",
-      "computedHash": "a63e1874fa8f1ee04194868f9b8ba18133aa20464586369f3eedb8df6000a0cc",
-      "commit": "8c99fa36d90068c82d547f7c12a9d67a3e95f4ee"
+      "computedHash": "c04b5cb0f38ea3aec41b0219478124a9b38d467c3cecd82cdf0ad694d9403628",
+      "commit": "e997ac5b9a74eab332d5e9793bb38a38c8cfdd74"
     },
     "code-simplification": {
       "source": "addyosmani/agent-skills",
@@ -145,8 +145,8 @@
       "source": "addyosmani/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/constraint-driven-development/SKILL.md",
-      "computedHash": "f8175e0c95e406c04bd0ffd6303d8495ff95a5aee0a46eb3cf5674ace87a6298",
-      "commit": "8c99fa36d90068c82d547f7c12a9d67a3e95f4ee"
+      "computedHash": "c0a86ba67b8de55c2b48a1110f294db90c380db0ad9329fae871eeb43d9b5efb",
+      "commit": "e997ac5b9a74eab332d5e9793bb38a38c8cfdd74"
     },
     "context-engineering": {
       "source": "addyosmani/agent-skills",
@@ -187,8 +187,8 @@
       "source": "addyosmani/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/doubt-driven-development/SKILL.md",
-      "computedHash": "bc1bb71936eb44e88bdae4699abe02756747eb8f36c2d38135721fa7f3d25085",
-      "commit": "8c99fa36d90068c82d547f7c12a9d67a3e95f4ee"
+      "computedHash": "3369c97f3c95f4bec25a956d54b86b19241e2dcf93b8f1c83bdc5bd2c07351b6",
+      "commit": "e997ac5b9a74eab332d5e9793bb38a38c8cfdd74"
     },
     "drive-screen": {
       "source": "coleam00/skills",
@@ -222,8 +222,8 @@
       "source": "addyosmani/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/frontend-ui-engineering/SKILL.md",
-      "computedHash": "1bea3daa371bfb466445f5a33ee063f2aadf27469b2308a340e803398bcb4251",
-      "commit": "8c99fa36d90068c82d547f7c12a9d67a3e95f4ee"
+      "computedHash": "ed0577a6473f4c90b809115925b34402658d320a4da3e47a7614fbe6733a1a82",
+      "commit": "e997ac5b9a74eab332d5e9793bb38a38c8cfdd74"
     },
     "git-workflow-and-versioning": {
       "source": "addyosmani/agent-skills",
@@ -264,8 +264,8 @@
       "source": "addyosmani/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/incremental-implementation/SKILL.md",
-      "computedHash": "62ef93c6389f110af49ed4fad1fe2c27d3d9dd2d8fe0d0f6db089489c3d4aac3",
-      "commit": "8c99fa36d90068c82d547f7c12a9d67a3e95f4ee"
+      "computedHash": "0d61dbaaa3a1222ea1cd7b497f65694c793b256b7f82d227b856cde25057ebfa",
+      "commit": "e997ac5b9a74eab332d5e9793bb38a38c8cfdd74"
     },
     "interview-me": {
       "source": "addyosmani/agent-skills",
@@ -292,8 +292,8 @@
       "source": "addyosmani/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/observability-and-instrumentation/SKILL.md",
-      "computedHash": "71661b8e1558d7eed8cdf93bfb731da1c3afed9b895b049ecf92792af0d8a364",
-      "commit": "8c99fa36d90068c82d547f7c12a9d67a3e95f4ee"
+      "computedHash": "3720071b84c8ee80bd5649dbc66da14a5a7b94262c672ca56bcb5b7480b463c4",
+      "commit": "e997ac5b9a74eab332d5e9793bb38a38c8cfdd74"
     },
     "opportunity-scan": {
       "source": "coleam00/skills",
@@ -313,8 +313,8 @@
       "source": "addyosmani/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/performance-optimization/SKILL.md",
-      "computedHash": "cfa0c39804554198a33e3beb2b0f920a1b468bb2e066822e1d08f4abeda3db33",
-      "commit": "8c99fa36d90068c82d547f7c12a9d67a3e95f4ee"
+      "computedHash": "5408f84feeed8c4e5abf5ee6b557e6d4e22a838c95e9d98bf64f49f4d1d16c7e",
+      "commit": "e997ac5b9a74eab332d5e9793bb38a38c8cfdd74"
     },
     "pick-ui-library": {
       "source": "emilkowalski/skills",
@@ -439,8 +439,8 @@
       "source": "addyosmani/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/planning-and-task-breakdown/SKILL.md",
-      "computedHash": "e4ef8d478d672103693af0cab5a97a1914f776099ef0756c2a093d9ae061f024",
-      "commit": "8c99fa36d90068c82d547f7c12a9d67a3e95f4ee"
+      "computedHash": "fcce61a29cf1364e78761639c0eaddd97c033e64531749f62b000c9d0a257f21",
+      "commit": "e997ac5b9a74eab332d5e9793bb38a38c8cfdd74"
     },
     "prime-backend": {
       "source": "coleam00/skills",
@@ -530,8 +530,8 @@
       "source": "addyosmani/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/security-and-hardening/SKILL.md",
-      "computedHash": "9bfc78e1ee2e23f3d226f610d8ed8e0cf6fb4f7e90a44db0a41b636735a24767",
-      "commit": "8c99fa36d90068c82d547f7c12a9d67a3e95f4ee"
+      "computedHash": "208e6266166f4a97792a391487f8df528c6a02ad70a0a86ada699836b2a70730",
+      "commit": "e997ac5b9a74eab332d5e9793bb38a38c8cfdd74"
     },
     "seo": {
       "source": "addyosmani/web-quality-skills",
@@ -551,8 +551,8 @@
       "source": "addyosmani/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/shipping-and-launch/SKILL.md",
-      "computedHash": "ae9b095cfb74edd0d2b63c24aaca99e5a2f95b50527a7508841b501eabd3820a",
-      "commit": "8c99fa36d90068c82d547f7c12a9d67a3e95f4ee"
+      "computedHash": "19d787c1f9daaf7a2982cd181dbed5f014d2fc208a8b2f37a550a594f83ed9c3",
+      "commit": "e997ac5b9a74eab332d5e9793bb38a38c8cfdd74"
     },
     "skills-create": {
       "source": "coleam00/skills",
@@ -593,22 +593,22 @@
       "source": "addyosmani/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/test-driven-development/SKILL.md",
-      "computedHash": "37cc05dea2a455d5d3ff252f14a7323ef378536603cce8cd2c758dc8fac790e6",
-      "commit": "8c99fa36d90068c82d547f7c12a9d67a3e95f4ee"
+      "computedHash": "521e792df0e2def3e38141e5336fe642e1f3bda1991a4b8e7b7be131d9e4a113",
+      "commit": "e997ac5b9a74eab332d5e9793bb38a38c8cfdd74"
     },
     "ui-ux-pro-max": {
       "source": "nextlevelbuilder/ui-ux-pro-max-skill",
       "sourceType": "github",
       "skillPath": ".claude/skills/ui-ux-pro-max/SKILL.md",
-      "computedHash": "605686282fb6812d8e3f4b1a06c9fb8ba7be4d7395090f41f221a9ba5a3dbe6b",
-      "commit": "ed766d3bf62f32c8d27762ad49abdc3a4744c84f"
+      "computedHash": "b2defbac0cde30996f120c953d243b5ccd396c55e550a98a08d4206eaadac670",
+      "commit": "a4fc248f6136552cb881e298847abc7ddce84e6b"
     },
     "using-agent-skills": {
       "source": "addyosmani/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/using-agent-skills/SKILL.md",
-      "computedHash": "026ffd73c9e433c0a70d0a06f5530840c5a9aefd11e77be92a262ff26a0ca140",
-      "commit": "8c99fa36d90068c82d547f7c12a9d67a3e95f4ee"
+      "computedHash": "741fa4facdd7970231184d621f4c5eaa5c52dedc3cf53e87b25f9daf4873d2cc",
+      "commit": "e997ac5b9a74eab332d5e9793bb38a38c8cfdd74"
     },
     "vercel-react-best-practices": {
       "source": "vercel-labs/agent-skills",
@@ -619,10 +619,10 @@
     },
     "web-design-guidelines": {
       "source": "vercel-labs/agent-skills",
-      "commit": "1a2c79d4e6c4a2283dc2c614b6538cbe1ed5ca62",
+      "commit": "5a37a6329fbad3666c3207392a6a7c0110e92efb",
       "sourceType": "github",
       "skillPath": "skills/web-design-guidelines/SKILL.md",
-      "computedHash": "4f68ae07187fb0d1fb78c88b503d089da4cf5a9d9625d1f2e425b1590bf96d92"
+      "computedHash": "5994e4cfd86144903d2ba750f862b9e36af15e3297aac983679e347b99f6cb71"
     },
     "web-quality-audit": {
       "source": "addyosmani/web-quality-skills",
