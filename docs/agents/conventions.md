@@ -46,3 +46,9 @@ How new code should look and where it plugs in. Read this before adding a module
 - `repo:` Never manually bump `"version"` in `package.json`, `package-lock.json`, `.release-please-manifest.json`, or hand-edit `CHANGELOG.md` in feature/fix PRs.
 - `repo:` Conventional Commit SemVer impact under Pre-1.0: `feat:` and `fix:` produce a PATCH bump; `chore:`, `docs:`, `ci:`, `test:`, `refactor:`, `perf:`, and `style:` produce no bump; `!` and `BREAKING CHANGE:` footers are forbidden unless explicitly requested by a human.
 - `repo:` UI and runtime version display must use `getAppVersion()` (`src/lib/app-version.ts`) backed by build-time `NEXT_PUBLIC_APP_VERSION` in `next.config.mjs` (never `process.env.npm_package_version`).
+
+## GitHub Actions Workflows
+
+- `repo:` Every workflow created or modified under `.github/workflows/` must include a concise `if: always()` summary step that writes a short Markdown summary to `$GITHUB_STEP_SUMMARY` (and echoes to stdout, e.g. via `tee -a "$GITHUB_STEP_SUMMARY"`) — see GitHub Docs: [Adding a job summary](https://docs.github.com/actions/using-workflows/workflow-commands-for-github-actions#adding-a-job-summary).
+- `repo:` Keep the summary brief and scannable (small Markdown table or 3–5 bullets): trigger/mode, step outcome, and what was actually executed vs. skipped (and why). Canonical example: `.github/workflows/release-please.yml`.
+- `golden:` Always pass `${{ ... }}` expressions into the summary step via `env:` variables — never interpolate untrusted context or step outputs directly inside `run:` shell scripts.

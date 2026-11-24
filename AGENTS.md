@@ -69,6 +69,7 @@ src/
 - Domain normalization strips protocol, auth, paths, and query params (`VvtatChecker.normalizeDomain`).
 - Lithuanian 9-digit company code verification enforces Modulo 11 check digits (`JarChecker.validateCompanyCodeFormat`).
 - HTTP requests must specify an `AbortController` timeout (2.5s–4s) to avoid hanging serverless functions.
+- **GitHub Actions Job Summaries:** Whenever creating or modifying a workflow in `.github/workflows/`, include a concise `if: always()` step writing to `$GITHUB_STEP_SUMMARY` ([Adding a job summary](https://docs.github.com/actions/using-workflows/workflow-commands-for-github-actions#adding-a-job-summary)) so every run clearly reports trigger/mode, outcome, and what was done or skipped (pass `${{ ... }}` via `env:`, never inline in `run:`).
 - Detailed conventions and code layout: Read `docs/agents/conventions.md`.
 
 ## Boundaries
@@ -99,7 +100,7 @@ This file is the index. Helpers are not always-on. Before you edit an area, **Re
 | ------------------------------------------------------- | ------------------------------- |
 | Planning, backlog, or GitHub Issues                     | `docs/agents/planning.md`       |
 | Stack, dependencies, or versions                        | `docs/agents/stack.md`          |
-| Module layout, imports, naming, or seams                | `docs/agents/conventions.md`    |
+| Module layout, imports, naming, CI workflows, or seams  | `docs/agents/conventions.md`    |
 | Audit orchestration, scraping, or code patterns         | `docs/agents/best-practices.md` |
 | UI components, styling, or accessibility                | `docs/agents/ui-ux.md`          |
 | Tests or test fixtures                                  | `docs/agents/testing.md`        |
