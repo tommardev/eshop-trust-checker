@@ -1,6 +1,6 @@
 {
   "name": "eshop-trust-checker",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "license": "AGPL-3.0-only",
   "description": "Lithuanian E-Shop Security and Eligibility Verification Web App based on VVTAT and State Registers",
