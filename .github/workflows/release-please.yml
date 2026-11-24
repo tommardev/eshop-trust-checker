@@ -1,9 +1,11 @@
-# Wave-controlled Pre-1.0 release automation (docs/AUTOMATION_WORKFLOW.md).
-# - On push to main: skips opening Release PRs (zero standing PRs blocking Core 1a sidecars),
-#   but still runs manifest.createReleases() when a merged Release PR is pushed.
-# - On workflow_dispatch: opens or updates the consolidated Release PR on demand.
+# Pre-1.0 release automation (docs/AUTOMATION_WORKFLOW.md).
+# - On push to main (or manual workflow_dispatch): opens or updates the Release PR
+#   when releasable feat:/fix: commits exist, and creates the git tag + GitHub Release
+#   when a merged Release PR is pushed.
+# - Core 1a intentionally pauses autonomous sidecars while a Release PR is open so a
+#   human can review and merge it cleanly before the next issue starts.
 # - For planned minor waves (e.g. 0.2.0): push an empty commit on main with footer
-#   "Release-As: 0.2.0" before triggering workflow_dispatch.
+#   "Release-As: 0.2.0" (the push automatically opens or updates the Release PR).
 name: Release Please
 
 on:
@@ -31,14 +33,11 @@ jobs:
       - name: Run release-please
         id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
-        with:
-          skip-github-pull-request: ${{ github.event_name == 'push' }}
 
       - name: Summarize run
         if: always()
         env:
           EVENT_NAME: ${{ github.event_name }}
-          SKIP_PR: ${{ github.event_name == 'push' }}
           RELEASE_STEP_OUTCOME: ${{ steps.release.outcome }}
           RELEASES_CREATED: ${{ steps.release.outputs.releases_created }}
           TAG_NAME: ${{ steps.release.outputs.tag_name }}
@@ -47,11 +46,7 @@ jobs:
           PR_JSON: ${{ steps.release.outputs.pr }}
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}
         run: |
-          if [ "$SKIP_PR" = "true" ]; then
-            MODE="push (tag/release merged Release PRs only; Release PR creation skipped)"
-          else
-            MODE="workflow_dispatch (open/update Release PR + tag/release if applicable)"
-          fi
+          MODE="${EVENT_NAME} (open/update Release PR + tag/release if applicable)"
 
           if [ "$RELEASES_CREATED" = "true" ]; then
             RELEASE_STATUS="Created ${TAG_NAME} (${RELEASE_URL})"
@@ -59,9 +54,7 @@ jobs:
             RELEASE_STATUS="None (no newly merged Release PR detected)"
           fi
 
-          if [ "$SKIP_PR" = "true" ]; then
-            PR_STATUS="Skipped on push (run workflow_dispatch to open/update a Release PR)"
-          elif [ "$PRS_CREATED" = "true" ]; then
+          if [ "$PRS_CREATED" = "true" ]; then
             PR_NUM=$(printf '%s' "$PR_JSON" | jq -r '.number // empty')
             PR_TITLE=$(printf '%s' "$PR_JSON" | jq -r '.title // empty')
             if [ -n "$PR_NUM" ]; then
