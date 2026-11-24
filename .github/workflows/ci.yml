@@ -1,0 +1,218 @@
+# Core CI quality gates (docs/PR_CHECKS_AND_PREVIEW_ROADMAP.md Phase 2).
+# Runs lint, typecheck, offline unit tests, and production build in parallel
+# on every PR to main and every push to main.
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        id: setup-node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        id: install
+        run: npm ci
+
+      - name: Run ESLint
+        id: check
+        run: npm run lint
+
+      - name: Summarize run
+        if: always()
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          NODE_VERSION: ${{ steps.setup-node.outputs.node-version }}
+          NPM_CACHE_HIT: ${{ steps.setup-node.outputs.cache-hit }}
+          INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          CHECK_OUTCOME: ${{ steps.check.outcome }}
+        run: |
+          {
+            echo "### CI Summary (lint)"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Trigger | \`${EVENT_NAME}\` |"
+            echo "| Node.js | \`${NODE_VERSION:-n/a}\` |"
+            echo "| npm cache hit | \`${NPM_CACHE_HIT:-false}\` |"
+            echo "| npm ci | \`${INSTALL_OUTCOME:-skipped}\` |"
+            echo "| npm run lint | \`${CHECK_OUTCOME:-skipped}\` |"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        id: setup-node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        id: install
+        run: npm ci
+
+      - name: Run TypeScript typecheck
+        id: check
+        run: npx tsc --noEmit --incremental false
+
+      - name: Summarize run
+        if: always()
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          NODE_VERSION: ${{ steps.setup-node.outputs.node-version }}
+          NPM_CACHE_HIT: ${{ steps.setup-node.outputs.cache-hit }}
+          INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          CHECK_OUTCOME: ${{ steps.check.outcome }}
+        run: |
+          {
+            echo "### CI Summary (typecheck)"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Trigger | \`${EVENT_NAME}\` |"
+            echo "| Node.js | \`${NODE_VERSION:-n/a}\` |"
+            echo "| npm cache hit | \`${NPM_CACHE_HIT:-false}\` |"
+            echo "| npm ci | \`${INSTALL_OUTCOME:-skipped}\` |"
+            echo "| npx tsc --noEmit --incremental false | \`${CHECK_OUTCOME:-skipped}\` |"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        id: setup-node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        id: install
+        run: npm ci
+
+      - name: Run unit tests
+        id: check
+        run: npm test
+
+      - name: Summarize run
+        if: always()
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          NODE_VERSION: ${{ steps.setup-node.outputs.node-version }}
+          NPM_CACHE_HIT: ${{ steps.setup-node.outputs.cache-hit }}
+          INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          CHECK_OUTCOME: ${{ steps.check.outcome }}
+        run: |
+          {
+            echo "### CI Summary (test)"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Trigger | \`${EVENT_NAME}\` |"
+            echo "| Node.js | \`${NODE_VERSION:-n/a}\` |"
+            echo "| npm cache hit | \`${NPM_CACHE_HIT:-false}\` |"
+            echo "| npm ci | \`${INSTALL_OUTCOME:-skipped}\` |"
+            echo "| npm test | \`${CHECK_OUTCOME:-skipped}\` |"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        id: setup-node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        id: install
+        run: npm ci
+
+      - name: Cache Next.js build
+        id: next-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**/*', 'next.config.mjs', 'package.json', 'tsconfig.json', 'tailwind.config.js', 'postcss.config.js') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('package-lock.json') }}-
+
+      - name: Run production build
+        id: check
+        run: npm run build
+
+      - name: Summarize run
+        if: always()
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          NODE_VERSION: ${{ steps.setup-node.outputs.node-version }}
+          NPM_CACHE_HIT: ${{ steps.setup-node.outputs.cache-hit }}
+          NEXT_CACHE_HIT: ${{ steps.next-cache.outputs.cache-hit }}
+          INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          CHECK_OUTCOME: ${{ steps.check.outcome }}
+        run: |
+          {
+            echo "### CI Summary (build)"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Trigger | \`${EVENT_NAME}\` |"
+            echo "| Node.js | \`${NODE_VERSION:-n/a}\` |"
+            echo "| npm cache hit | \`${NPM_CACHE_HIT:-false}\` |"
+            echo "| Next.js cache hit | \`${NEXT_CACHE_HIT:-false}\` |"
+            echo "| npm ci | \`${INSTALL_OUTCOME:-skipped}\` |"
+            echo "| npm run build | \`${CHECK_OUTCOME:-skipped}\` |"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
