@@ -75,7 +75,7 @@ src/
 
 - **Always:** Validate and sanitize target domains before scraping; enforce SSRF protections against internal/private IP ranges; use strict HTTP timeouts; check TypeScript types (`npx tsc --noEmit`).
 - **Ask first:** Adding new external npm dependencies; database migrations; altering scoring thresholds in `AuditEngine`; modifying public API schemas.
-- **Never:** Commit secrets or `.env.local`; execute unscoped network calls to loopback/private IPs; use `dangerouslySetInnerHTML` with scraped web content; skip hooks; delete failing tests to go green.
+- **Never:** Commit secrets or `.env.local`; execute unscoped network calls to loopback/private IPs; use `dangerouslySetInnerHTML` with scraped web content; skip hooks; delete failing tests to go green; manually bump `"version"` in `package.json`, `package-lock.json`, or `.release-please-manifest.json`, or hand-edit `CHANGELOG.md` in feature/fix PRs.
 
 ## Testing
 
@@ -89,6 +89,7 @@ src/
 - Follow `.agents/commands/commit.md` for commits (include a `Context:` section whenever `AGENTS.md`, `docs/`, or `.agents/` assets change).
 - Keep changes surgical and atomic.
 - Non-trivial features, refactors, bugs, and follow-up work go to GitHub Issues first (`gh issue create`); link PRs with `Closes #<N>`. Read `docs/agents/planning.md`.
+- **Pre-1.0 Versioning (`0.MINOR.PATCH`):** Managed by `release-please` (`release-please-config.json`, `.release-please-manifest.json`). `feat:`/`fix:` = patch bump; `chore:`/`docs:`/`ci:`/`test:`/`refactor:`/`perf:`/`style:` = no bump; forbid `!` and `BREAKING CHANGE:` unless explicitly instructed by a human; never manually edit version/changelog files.
 
 ## Pointers
 

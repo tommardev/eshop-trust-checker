@@ -39,3 +39,10 @@ How new code should look and where it plugs in. Read this before adding a module
 
 - `repo:` `AuditEngine.analyze(inputQuery: string): Promise<TrustAuditResult>` is the single entry point orchestrator for auditing.
 - `golden:` Keep the public surface small; do not leak scraper internals or raw HTML into client responses (Hyrum's Law).
+
+## Versioning and Releases
+
+- `repo:` Application versioning follows Pre-1.0 SemVer (`0.MINOR.PATCH`) managed exclusively by `release-please` (`release-please-config.json`, `.release-please-manifest.json`).
+- `repo:` Never manually bump `"version"` in `package.json`, `package-lock.json`, `.release-please-manifest.json`, or hand-edit `CHANGELOG.md` in feature/fix PRs.
+- `repo:` Conventional Commit SemVer impact under Pre-1.0: `feat:` and `fix:` produce a PATCH bump; `chore:`, `docs:`, `ci:`, `test:`, `refactor:`, `perf:`, and `style:` produce no bump; `!` and `BREAKING CHANGE:` footers are forbidden unless explicitly requested by a human.
+- `repo:` UI and runtime version display must use `getAppVersion()` (`src/lib/app-version.ts`) backed by build-time `NEXT_PUBLIC_APP_VERSION` in `next.config.mjs` (never `process.env.npm_package_version`).
