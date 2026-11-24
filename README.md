@@ -2,10 +2,13 @@
 
 [![Live App](https://img.shields.io/badge/Live%20App-Vercel-000000?logo=vercel&logoColor=white)](https://eshop-trust-checker.vercel.app)
 [![Version](https://img.shields.io/static/v1?label=Version&message=v0.1.1&color=1d4ed8)](package.json) <!-- x-release-please-version -->
+[![License: AGPL-3.0 + Commercial](https://img.shields.io/badge/License-AGPL--3.0%20%2B%20Commercial-blue.svg)](LICENSE)
 [![Next.js](https://img.shields.io/badge/Next.js-15.5-000000?logo=next.js&logoColor=white)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.18-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-3.4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![GitHub Issues](https://img.shields.io/github/issues/tommardev/eshop-trust-checker)](https://github.com/tommardev/eshop-trust-checker/issues)
+[![Last Commit](https://img.shields.io/github/last-commit/tommardev/eshop-trust-checker)](https://github.com/tommardev/eshop-trust-checker/commits/main)
 
 > Automatinis el. parduotuvių ir svetainių patikimumo, saugumo bei teisinės atitikties tikrintuvas, besiremiantis oficialiais Lietuvos ir ES šaltiniais (VVTAT, Registrų Centras, Lietuvos Bankas, WHOIS/DOMREG).
 
@@ -97,3 +100,32 @@ Naujas komandos narys ar nauja darbo vieta: atkurti agentų įrankius paleidus:
 npx skills experimental_install --yes
 ```
 (Jokiu būdu nepergeneruokite `AGENTS.md` ar komandos taisyklių).
+
+---
+
+## 🤝 Prisidėjimas ir Bendruomenė (Contributing)
+
+Kviečiame prisidėti prie projekto! Prieš pateikdami pakeitimus, susipažinkite su [`CONTRIBUTING.md`](CONTRIBUTING.md), kur aprašyti:
+- **Aplinkos reikalavimai:** Node.js `22.18+` ir lokalus paleidimas.
+- **Privalomos patikros komandos:** `npm test`, `npx tsc --noEmit --incremental false`, `npm run lint` ir `npm run build`.
+- **Darbo eiga ir žinutės:** issue-first procesas (privalomi GitHub Issue ir `Closes #<N>`) bei **Conventional Commits**.
+
+Visi bendruomenės dalyviai privalo laikytis elgesio kodekso, pateikto [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
+
+---
+
+## 🔒 Saugumas (Security)
+
+Pastebėję saugumo spragą, **neatidarykite viešo GitHub Issue**. Apie pažeidžiamumus praneškite privačiai per [GitHub Security Advisories](https://github.com/tommardev/eshop-trust-checker/security/advisories/new) — išsami saugumo politika, palaikomos versijos ir SSRF/scraping ribos aprašytos [`SECURITY.md`](SECURITY.md).
+
+---
+
+## 📄 Licencija (License)
+
+Copyright (c) 2026 tommardev. All rights reserved.
+
+Šis projektas platinamas pagal dvigubos licencijos (**Dual-License**) modelį:
+
+- **Atvirasis kodas:** [**GNU AGPL-3.0-only (Version 3.0 only)**](LICENSE) — laisvam naudojimui, modifikavimui ir savarankiškam talpinimui laikantis GNU Affero General Public License v3.0 only (`AGPL-3.0-only`) sąlygų.
+- **Komercinė licencija:** [**Commercial License**](COMMERCIAL_LICENSE.md) — uždarojo kodo ar komerciniam naudojimui už `AGPL-3.0-only` sąlygų ribų (suteikiama atskiru rašytiniu susitarimu).
+
