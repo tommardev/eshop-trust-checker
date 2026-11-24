@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/tommardev/eshop-trust-checker/compare/v0.1.1...v0.1.2) (2026-11-24)
+
+
+### Features
+
+* prepare repository for Public visibility (license, SECURITY.md, community files, metadata, README badges) ([#31](https://github.com/tommardev/eshop-trust-checker/issues/31)) ([#35](https://github.com/tommardev/eshop-trust-checker/issues/35)) ([46bb95d](https://github.com/tommardev/eshop-trust-checker/commit/46bb95d6956d4a7536e2285bc30cbcb10f74a34a))
+
 ## [0.1.1](https://github.com/tommardev/eshop-trust-checker/compare/v0.1.0...v0.1.1) (2026-11-24)
 
 
