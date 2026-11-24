@@ -1,6 +1,6 @@
 {
   "name": "eshop-trust-checker",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Lithuanian E-Shop Security and Eligibility Verification Web App based on VVTAT and State Registers",
   "engines": {
