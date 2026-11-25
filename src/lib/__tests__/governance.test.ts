@@ -231,11 +231,16 @@ describe('public repository governance and readiness', () => {
       'README.md must preserve x-release-please-version marker',
     );
 
-    const prematureWorkflowBadges = [
-      'workflows/ci.yml',
-      'workflows/codeql.yml',
-      'workflows/security.yml',
-    ] as const;
+    assert.ok(
+      readme.includes('actions/workflows/ci.yml/badge.svg'),
+      'README.md must include CI workflow status badge',
+    );
+    assert.ok(
+      readme.includes('actions/workflows/codeql.yml/badge.svg'),
+      'README.md must include CodeQL workflow status badge',
+    );
+
+    const prematureWorkflowBadges = ['workflows/security.yml'] as const;
 
     for (const workflowPath of prematureWorkflowBadges) {
       assert.strictEqual(

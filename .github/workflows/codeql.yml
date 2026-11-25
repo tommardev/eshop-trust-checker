@@ -1,0 +1,80 @@
+# Static security analysis via GitHub CodeQL (docs/PR_CHECKS_AND_PREVIEW_ROADMAP.md Task 4.4).
+# Scans JavaScript/TypeScript with the security-extended query suite on PRs,
+# pushes to main, a weekly schedule, and manual dispatch.
+name: CodeQL
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch: {}
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: javascript-typescript
+            build-mode: none
+
+    steps:
+      - name: Checkout repository
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        id: init
+        uses: github/codeql-action/init@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended
+
+      - name: Perform CodeQL Analysis
+        id: analyze
+        uses: github/codeql-action/analyze@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
+        with:
+          category: "/language:${{ matrix.language }}"
+
+      - name: Summarize run
+        if: always()
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          LANGUAGE: ${{ matrix.language }}
+          BUILD_MODE: ${{ matrix.build-mode }}
+          INIT_OUTCOME: ${{ steps.init.outcome }}
+          ANALYZE_OUTCOME: ${{ steps.analyze.outcome }}
+        run: |
+          {
+            echo "### CodeQL Summary (${LANGUAGE})"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Trigger | \`${EVENT_NAME}\` |"
+            echo "| Language | \`${LANGUAGE}\` |"
+            echo "| Build mode | \`${BUILD_MODE}\` |"
+            echo "| Query suite | \`security-extended\` |"
+            echo "| Initialize CodeQL | \`${INIT_OUTCOME:-skipped}\` |"
+            echo "| Perform CodeQL Analysis | \`${ANALYZE_OUTCOME:-skipped}\` |"
+          } | tee -a "$GITHUB_STEP_SUMMARY"

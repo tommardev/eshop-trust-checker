@@ -97,7 +97,7 @@ Run the 4 repo-documented checks automatically on every PR to `main` and every p
   - **Steps:** Cache `.next/cache` (SHA-pinned `actions/cache`) and run `npm run build` (`next build`) to catch Next.js App Router, SSR, and bundling errors.
   - **Verify:** `.next` production build succeeds on `ubuntu-latest`.
 
-- [ ] **2.6 Verify all 4 CI checks on a live GitHub PR** *(Pending: verified on the live PR via `gh pr checks` once the PR is opened)*
+- [x] **2.6 Verify all 4 CI checks on a live GitHub PR** *(Completed: verified green on PR `#38` — `lint`, `typecheck`, `test`, `build`)*
   - **Steps:** Open a PR with `.github/workflows/ci.yml`, run `gh pr checks`, and confirm `lint`, `typecheck`, `test`, and `build` all report `pass`.
   - **Verify:** `gh pr checks <pr-number>` shows 4 green checks.
 
@@ -178,7 +178,7 @@ Protect the repo against vulnerable packages, leaked secrets, and SSRF/XSS regre
     2. Add `.env.example` (empty variable names only, zero real secrets) if env vars are introduced in Phase 3.
   - **Verify:** Workflow fails if a dummy test secret pattern is tested locally/in a branch and passes cleanly on `main`.
 
-- [ ] **4.4 Add static security analysis (CodeQL)**
+- [x] **4.4 Add static security analysis (CodeQL)**
   - **Files:** `.github/workflows/codeql.yml`
   - **Steps:**
     1. Check GitHub plan support first (CodeQL on private repos may require public visibility or GitHub Code Security / GHAS).
@@ -211,8 +211,8 @@ Standardize code style, PR metadata, and merge rules.
     2. Add a PR title check (`amannn/action-semantic-pull-request` pinned to a 40-char commit SHA, with `permissions: { pull-requests: read }` and `timeout-minutes: 5`) enforcing Conventional Commit prefixes (`feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `style`, `ci`) matching `AGENTS.md`.
   - **Verify:** Non-conventional PR titles fail the check; valid titles pass.
 
-- [ ] **5.4 Enforce Branch Protection / Ruleset on `main`**
-  - **Current Blocker:** GitHub API returns `403` (`Upgrade to GitHub Pro or make this repository public to enable this feature`) because `tommardev/eshop-trust-checker` is currently `private` on a Free plan.
+- [x] **5.4 Enforce Branch Protection / Ruleset on `main`**
+  - **Status:** Repository is `PUBLIC` and the `Protect main` Ruleset is active with Repository Admin bypass (`actor_id: 5`), PR review (`1` approval, dismiss stale reviews, conversation resolution), up-to-date required checks (`lint`, `typecheck`, `test`, `build`, `Analyze (javascript-typescript)`), and blocked force-push/deletion.
   - **Steps:**
     1. Once the repository becomes public or is upgraded to GitHub Pro, create a Ruleset on `main`.
     2. Require: PR before merging (`>= 1` approval), up-to-date branch, conversation resolution, no force-push, and passing status checks (`lint`, `typecheck`, `test`, `build`, `audit`, `smoke` if added).
@@ -258,3 +258,4 @@ Add these once UI components (`#7`, `#8`), `/api/check` (`#6`), and test suite (
 | 2026-11-19 | 1.1–1.4 | `feat/issue-13-ci-prep` (Issue #13) | Aligned `engines.node` (`>=22.18.0`), multi-file `npm test` globs (`src/**/*.test.ts` / `src/**/*.spec.ts`), validation docs (`README.md`, `stack.md`, `testing.md`), and offline mock checks; verified on Node `v24.20.0` (`npm test`: 100/100 pass, `tsc`, `lint`, `build`). |
 | 2026-11-23 | 3.3 | Manual / Vercel | Connected Vercel GitHub App (`https://eshop-trust-checker.vercel.app`) with automatic PR previews; recorded in `docs/agents/stack.md` and commented on Issue #15. |
 | 2026-11-25 | 2.1–2.5 | `feat/issue-14-core-ci-workflow` (Issue #14) | Added `.github/workflows/ci.yml` with 40-char SHA-pinned `node24` actions, parallel `lint`/`typecheck`/`test`/`build` jobs, `.next/cache`, `$GITHUB_STEP_SUMMARY`, and offline `ci-workflow.test.ts`; Task `2.6` pending live PR check run. |
+| 2026-11-25 | 2.6, 4.4, 5.4 | `feat/issue-32-codeql-security-ruleset` (Issue #32) | Verified Core CI checks (`lint`, `typecheck`, `test`, `build`) green on PR `#38`; added hardened `.github/workflows/codeql.yml` (`javascript-typescript`, `security-extended`) with offline `codeql-workflow.test.ts` and live `CI`/`CodeQL` README badges; enabled Secret Scanning, Push Protection, Private Vulnerability Reporting, and active `Protect main` Ruleset (Repository Admin bypass `actor_id: 5`). |
