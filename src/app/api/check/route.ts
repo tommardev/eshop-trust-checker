@@ -3,6 +3,7 @@ import { AuditEngine } from '@/lib/audit-engine';
 import { Security } from '@/lib/security';
 import { VvtatChecker } from '@/lib/vvtat-checker';
 
+export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {

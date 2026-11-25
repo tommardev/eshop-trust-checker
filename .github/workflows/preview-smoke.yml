@@ -1,0 +1,368 @@
+# Post-deployment preview smoke check (docs/PR_CHECKS_AND_PREVIEW_ROADMAP.md Task 3.4).
+# Triggers on deployment_status success, validates target URL allowlist before sending
+# optional Vercel bypass headers, probes GET / (200) and POST /api/check SSRF blocking (400),
+# publishes commit status `smoke`, and writes a run summary.
+name: Preview Smoke Check
+
+on:
+  deployment_status: {}
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.deployment.id }}
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: smoke
+    if: github.event.deployment_status.state == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      deployments: read
+      statuses: write
+    steps:
+      - name: Setup Node.js
+        id: setup-node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+
+      - name: Run preview smoke probe
+        id: smoke-probe
+        env:
+          TARGET_URL: ${{ github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
+          DEPLOYMENT_ENVIRONMENT: ${{ github.event.deployment_status.environment }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          node <<'EOF'
+          import { appendFileSync } from 'node:fs';
+
+          const HOSTNAME_ALLOWLIST_REGEX =
+            /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:vercel\.app|netlify\.app)$/;
+          const RETRYABLE_STATUSES = new Set([404, 429, 502, 503, 504]);
+          const DEFAULT_BACKOFF_MS = [2000, 4000, 6000, 8000];
+          const MAX_ATTEMPTS = 5;
+          const REQUEST_TIMEOUT_MS = 10000;
+
+          const bypassSecret = (process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '').trim();
+
+          class NonRetryableError extends Error {}
+
+          function sanitizeSingleLine(value) {
+            let text = String(value ?? '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+            if (bypassSecret && text.includes(bypassSecret)) {
+              text = text.split(bypassSecret).join('[REDACTED]');
+            }
+            return text;
+          }
+
+          function writeOutput(key, value) {
+            const outputPath = process.env.GITHUB_OUTPUT;
+            if (!outputPath) {
+              return;
+            }
+            appendFileSync(outputPath, `${key}=${sanitizeSingleLine(value)}\n`, 'utf8');
+          }
+
+          function parseBackoffDelays(raw) {
+            if (typeof raw !== 'string' || raw.trim() === '') {
+              return DEFAULT_BACKOFF_MS;
+            }
+            const parsed = raw
+              .split(',')
+              .map((entry) => Number(entry.trim()))
+              .map((ms) => (Number.isFinite(ms) && ms >= 0 ? ms : 0));
+            return parsed.length > 0 ? parsed : DEFAULT_BACKOFF_MS;
+          }
+
+          function validateTargetUrl(rawUrl) {
+            const trimmed = (rawUrl || '').trim();
+            if (!trimmed) {
+              throw new Error('Missing deployment target URL (TARGET_URL).');
+            }
+
+            let parsed;
+            try {
+              parsed = new URL(trimmed);
+            } catch {
+              throw new Error('Invalid deployment target URL.');
+            }
+
+            if (parsed.protocol !== 'https:') {
+              throw new Error('Deployment target URL must use https://.');
+            }
+            if (parsed.username !== '' || parsed.password !== '') {
+              throw new Error('Deployment target URL must not contain userinfo credentials.');
+            }
+            if (parsed.port !== '') {
+              throw new Error('Deployment target URL must not specify a custom port.');
+            }
+
+            const hostname = parsed.hostname.toLowerCase();
+            if (!HOSTNAME_ALLOWLIST_REGEX.test(hostname)) {
+              throw new Error(
+                `Deployment host "${hostname}" is not in the *.vercel.app / *.netlify.app allowlist.`,
+              );
+            }
+
+            return { origin: parsed.origin, hostname };
+          }
+
+          async function sleep(ms) {
+            if (ms > 0) {
+              await new Promise((resolve) => setTimeout(resolve, ms));
+            }
+          }
+
+          async function fetchWithRetry(url, init, label, backoffDelays) {
+            let lastError;
+
+            for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+              try {
+                const response = await fetch(url, {
+                  ...init,
+                  redirect: 'manual',
+                  signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+                });
+
+                if (response.status === 401 || response.status === 403) {
+                  await response.body?.cancel?.().catch(() => {});
+                  const hint = bypassSecret
+                    ? 'verify VERCEL_AUTOMATION_BYPASS_SECRET is valid for this project'
+                    : 'configure VERCEL_AUTOMATION_BYPASS_SECRET if Deployment Protection is enabled';
+                  throw new NonRetryableError(
+                    `${label} failed fast with HTTP ${response.status} (${hint}).`,
+                  );
+                }
+
+                if (RETRYABLE_STATUSES.has(response.status) && attempt < MAX_ATTEMPTS) {
+                  await response.body?.cancel?.().catch(() => {});
+                  const delayMs =
+                    backoffDelays[Math.min(attempt - 1, backoffDelays.length - 1)] ?? 0;
+                  await sleep(delayMs);
+                  continue;
+                }
+
+                return response;
+              } catch (error) {
+                if (error instanceof NonRetryableError) {
+                  throw error;
+                }
+                lastError = error;
+                if (attempt < MAX_ATTEMPTS) {
+                  const delayMs =
+                    backoffDelays[Math.min(attempt - 1, backoffDelays.length - 1)] ?? 0;
+                  await sleep(delayMs);
+                  continue;
+                }
+              }
+            }
+
+            const errMsg = lastError instanceof Error ? lastError.message : String(lastError);
+            throw new Error(`${label} failed after ${MAX_ATTEMPTS} attempts: ${errMsg}`);
+          }
+
+          async function runSmokeProbe() {
+            const { origin, hostname } = validateTargetUrl(process.env.TARGET_URL);
+            writeOutput('validated_origin', origin);
+
+            const backoffDelays = parseBackoffDelays(process.env.SMOKE_BACKOFF_MS);
+            const baseHeaders = {
+              Accept: 'text/html,application/json',
+            };
+            if (bypassSecret && hostname.endsWith('.vercel.app')) {
+              baseHeaders['x-vercel-protection-bypass'] = bypassSecret;
+            }
+
+            const homeRes = await fetchWithRetry(
+              `${origin}/`,
+              {
+                method: 'GET',
+                headers: baseHeaders,
+              },
+              'GET /',
+              backoffDelays,
+            );
+            await homeRes.body?.cancel?.().catch(() => {});
+            writeOutput('home_status', String(homeRes.status));
+            if (homeRes.status !== 200) {
+              throw new Error(`GET ${origin}/ expected HTTP 200, got ${homeRes.status}.`);
+            }
+
+            const ssrfRes = await fetchWithRetry(
+              `${origin}/api/check`,
+              {
+                method: 'POST',
+                headers: {
+                  ...baseHeaders,
+                  'Content-Type': 'application/json',
+                  Accept: 'application/json',
+                },
+                body: JSON.stringify({ query: 'http://127.0.0.1' }),
+              },
+              'POST /api/check',
+              backoffDelays,
+            );
+            writeOutput('ssrf_status', String(ssrfRes.status));
+            if (ssrfRes.status !== 400) {
+              await ssrfRes.body?.cancel?.().catch(() => {});
+              throw new Error(
+                `POST ${origin}/api/check expected HTTP 400 for SSRF probe, got ${ssrfRes.status}.`,
+              );
+            }
+
+            const contentType = (ssrfRes.headers.get('content-type') || '').toLowerCase();
+            const rawBody = await ssrfRes.text();
+            if (!contentType.includes('application/json')) {
+              throw new Error(
+                `POST ${origin}/api/check expected application/json response, got "${contentType || 'none'}".`,
+              );
+            }
+
+            let parsedBody;
+            try {
+              parsedBody = JSON.parse(rawBody);
+            } catch {
+              throw new Error('POST /api/check returned invalid JSON for SSRF 400 probe.');
+            }
+
+            if (
+              !parsedBody ||
+              typeof parsedBody !== 'object' ||
+              typeof parsedBody.error !== 'string' ||
+              !parsedBody.error.toLowerCase().includes('ssrf')
+            ) {
+              throw new Error(
+                'POST /api/check HTTP 400 JSON did not contain an SSRF error message.',
+              );
+            }
+
+            const environment = sanitizeSingleLine(process.env.DEPLOYMENT_ENVIRONMENT || '');
+            const detail = 'Preview smoke checks passed (GET / 200, POST /api/check SSRF 400).';
+            writeOutput('detail', detail);
+            console.log(`${detail}${environment ? ` [${environment}]` : ''}`);
+          }
+
+          try {
+            await runSmokeProbe();
+          } catch (error) {
+            const message = sanitizeSingleLine(
+              error instanceof Error ? error.message : String(error),
+            );
+            const detail = message || 'Preview smoke probe failed.';
+            writeOutput('detail', detail);
+            console.error(detail);
+            process.exitCode = 1;
+          }
+          EOF
+
+      - name: Publish smoke commit status
+        id: commit-status
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          DEPLOYMENT_SHA: ${{ github.event.deployment.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SMOKE_OUTCOME: ${{ steps.smoke-probe.outcome }}
+          SMOKE_DETAIL: ${{ steps.smoke-probe.outputs.detail }}
+        run: |
+          node <<'EOF'
+          async function publishCommitStatus() {
+            const token = (process.env.GITHUB_TOKEN || '').trim();
+            const repo = (process.env.GITHUB_REPOSITORY || '').trim();
+            const sha = (process.env.DEPLOYMENT_SHA || '').trim();
+            const runUrl = (process.env.RUN_URL || '').trim();
+            const outcome = (process.env.SMOKE_OUTCOME || '').trim();
+            const detail = (process.env.SMOKE_DETAIL || '').replace(/[\r\n]+/g, ' ').trim();
+
+            if (!token) {
+              throw new Error('Missing GITHUB_TOKEN for commit status update.');
+            }
+            if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
+              throw new Error('Invalid GITHUB_REPOSITORY format.');
+            }
+            if (!/^[0-9a-f]{40}$/i.test(sha)) {
+              throw new Error('Invalid DEPLOYMENT_SHA format.');
+            }
+
+            const state = outcome === 'success' ? 'success' : 'failure';
+            const fallbackDescription =
+              state === 'success'
+                ? 'Preview smoke checks passed.'
+                : 'Preview smoke checks failed.';
+            const rawDescription = detail || fallbackDescription;
+            const description =
+              rawDescription.length > 140
+                ? `${rawDescription.slice(0, 137)}...`
+                : rawDescription;
+
+            const response = await fetch(
+              `https://api.github.com/repos/${repo}/statuses/${sha}`,
+              {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  Accept: 'application/vnd.github+json',
+                  'X-GitHub-Api-Version': '2022-11-28',
+                  'Content-Type': 'application/json',
+                  'User-Agent': 'eshop-trust-checker-preview-smoke',
+                },
+                body: JSON.stringify({
+                  state,
+                  context: 'smoke',
+                  description,
+                  target_url: runUrl,
+                }),
+                signal: AbortSignal.timeout(10000),
+              },
+            );
+
+            if (!response.ok) {
+              const errorBody = (await response.text()).slice(0, 300);
+              throw new Error(
+                `Failed to publish commit status (HTTP ${response.status}): ${errorBody}`,
+              );
+            }
+          }
+
+          publishCommitStatus().catch((error) => {
+            console.error(error instanceof Error ? error.message : String(error));
+            process.exitCode = 1;
+          });
+          EOF
+
+      - name: Summarize run
+        if: always()
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DEPLOYMENT_ENVIRONMENT: ${{ github.event.deployment_status.environment }}
+          DEPLOYMENT_STATE: ${{ github.event.deployment_status.state }}
+          DEPLOYMENT_SHA: ${{ github.event.deployment.sha }}
+          NODE_VERSION: ${{ steps.setup-node.outputs.node-version }}
+          VALIDATED_ORIGIN: ${{ steps.smoke-probe.outputs.validated_origin }}
+          HOME_STATUS: ${{ steps.smoke-probe.outputs.home_status }}
+          SSRF_STATUS: ${{ steps.smoke-probe.outputs.ssrf_status }}
+          PROBE_OUTCOME: ${{ steps.smoke-probe.outcome }}
+          STATUS_OUTCOME: ${{ steps.commit-status.outcome }}
+          PROBE_DETAIL: ${{ steps.smoke-probe.outputs.detail }}
+        run: |
+          {
+            echo "### Preview Smoke Summary"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Trigger | \`${EVENT_NAME}\` |"
+            echo "| Environment | \`${DEPLOYMENT_ENVIRONMENT:-n/a}\` |"
+            echo "| Deployment state | \`${DEPLOYMENT_STATE:-n/a}\` |"
+            echo "| Deployment SHA | \`${DEPLOYMENT_SHA:-n/a}\` |"
+            echo "| Node.js | \`${NODE_VERSION:-n/a}\` |"
+            echo "| Validated origin | \`${VALIDATED_ORIGIN:-n/a}\` |"
+            echo "| GET / status | \`${HOME_STATUS:-n/a}\` |"
+            echo "| POST /api/check SSRF status | \`${SSRF_STATUS:-n/a}\` |"
+            echo "| Smoke probe | \`${PROBE_OUTCOME:-skipped}\` |"
+            echo "| Commit status (smoke) | \`${STATUS_OUTCOME:-skipped}\` |"
+            echo "| Detail | ${PROBE_DETAIL:-n/a} |"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
