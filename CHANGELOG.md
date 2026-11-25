@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/tommardev/eshop-trust-checker/compare/v0.1.3...v0.1.4) (2026-11-25)
+
+
+### Features
+
+* add CodeQL workflow, live CI/CodeQL badges, and governance docs ([#40](https://github.com/tommardev/eshop-trust-checker/issues/40)) ([106d9e8](https://github.com/tommardev/eshop-trust-checker/commit/106d9e8ec5c84b852d5697393bdfbcab0658a844))
+
 ## [0.1.3](https://github.com/tommardev/eshop-trust-checker/compare/v0.1.2...v0.1.3) (2026-11-25)
 
 
