@@ -1,6 +1,6 @@
 # ADR-002: Public Repository Readiness, Licensing & Governance Plan
 
-- **Status:** Proposed (Ready for Prep Execution)
+- **Status:** Accepted (Phases A, B & C Implemented — 2026-11-25)
 - **Date:** 2026-11-23
 - **Related:** `docs/PR_CHECKS_AND_PREVIEW_ROADMAP.md` (`4.4`, `5.4`), `docs/agents/security.md`, `docs/agents/planning.md`, Issues `#31` (Phase A) & `#32` (Phase C)
 
@@ -84,6 +84,11 @@ Before switching visibility to `PUBLIC`, the repository should meet standard ope
      - Require Pull Request before merging (`>= 1` approval or bypass for repo admin if solo maintainer), conversation resolution, and up-to-date branch.
      - Add required status checks (`lint`, `typecheck`, `test`, `build`) as soon as Issue `#14` merges (and `audit` / `smoke` once `#17` / `#15` merge).
 4. Check off `4.4` and `5.4` in `docs/PR_CHECKS_AND_PREVIEW_ROADMAP.md`.
+
+> **Implementation Status (2026-11-25):** Phases A (`#31`, PR `#35`), B (`PUBLIC` visibility flip), and C (`#32`) are complete.
+> - **Security controls:** GitHub Secret Scanning, Push Protection, Private Vulnerability Reporting, and `.github/workflows/codeql.yml` (`javascript-typescript`, `security-extended`, 40-char SHA-pinned `node24` actions) are enabled, alongside live `CI` and `CodeQL` status badges in `README.md` (`Security` badge deferred until `#17`).
+> - **`Protect main` Ruleset:** Enforced on `~DEFAULT_BRANCH` blocking deletion and force-push, requiring PRs (`1` approval, dismiss stale reviews, conversation resolution) and up-to-date required checks (`lint`, `typecheck`, `test`, `build`, `Analyze (javascript-typescript)`), with **Repository Admin bypass** (`RepositoryRole` `actor_id: 5`, `bypass_mode: "always"`) so solo-maintainer automation (Planner sidecar pushes to `main` and verified solo merges) stays unblocked while external contributors remain strictly gated.
+> - **`release-please` note:** `.github/workflows/release-please.yml` remains on default `GITHUB_TOKEN`; Release PRs do not auto-trigger `pull_request` workflows due to GitHub's anti-recursion rule and can be triggered via close/reopen or merged via Repository Admin bypass once `main` is green.
 
 ---
 
