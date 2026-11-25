@@ -69,7 +69,7 @@ Fix these mismatches first so GitHub Actions does not fail immediately or silent
 
 Run the 4 repo-documented checks automatically on every PR to `main` and every push to `main`.
 
-- [ ] **2.1 Create `.github/workflows/ci.yml` skeleton**
+- [x] **2.1 Create `.github/workflows/ci.yml` skeleton**
   - **Files:** `.github/workflows/ci.yml`
   - **Steps:**
     1. Trigger on `pull_request` (`branches: [main]`) and `push` (`branches: [main]`).
@@ -77,27 +77,27 @@ Run the 4 repo-documented checks automatically on every PR to `main` and every p
     3. Pin **all** first- and third-party GitHub Actions to full 40-char commit SHAs (with `# vX.Y.Z` comments) across every workflow: use `actions/checkout` with `persist-credentials: false` and `actions/setup-node` with `node-version: '24'` (or `'22'` matching `>=22.18.0`) and `cache: 'npm'`, then `npm ci`.
   - **Verify:** YAML syntax is valid and workflow triggers on PR open/sync.
 
-- [ ] **2.2 Add `lint` job**
+- [x] **2.2 Add `lint` job**
   - **Files:** `.github/workflows/ci.yml`
   - **Steps:** Run `npm run lint` (`eslint --ext .ts,.tsx src` with `.eslintrc.json`).
   - **Verify:** Job passes on `main` and fails when an intentional ESLint violation is tested.
 
-- [ ] **2.3 Add `typecheck` job**
+- [x] **2.3 Add `typecheck` job**
   - **Files:** `.github/workflows/ci.yml`
   - **Steps:** Run `npx tsc --noEmit --incremental false`.
   - **Verify:** Job passes with `0` TypeScript errors.
 
-- [ ] **2.4 Add `test` job**
+- [x] **2.4 Add `test` job**
   - **Files:** `.github/workflows/ci.yml`
   - **Steps:** Run `npm test`.
   - **Verify:** Job executes all unit tests offline and exits `0`.
 
-- [ ] **2.5 Add `build` job**
+- [x] **2.5 Add `build` job**
   - **Files:** `.github/workflows/ci.yml`
   - **Steps:** Cache `.next/cache` (SHA-pinned `actions/cache`) and run `npm run build` (`next build`) to catch Next.js App Router, SSR, and bundling errors.
   - **Verify:** `.next` production build succeeds on `ubuntu-latest`.
 
-- [ ] **2.6 Verify all 4 CI checks on a live GitHub PR**
+- [ ] **2.6 Verify all 4 CI checks on a live GitHub PR** *(Pending: verified on the live PR via `gh pr checks` once the PR is opened)*
   - **Steps:** Open a PR with `.github/workflows/ci.yml`, run `gh pr checks`, and confirm `lint`, `typecheck`, `test`, and `build` all report `pass`.
   - **Verify:** `gh pr checks <pr-number>` shows 4 green checks.
 
@@ -257,3 +257,4 @@ Add these once UI components (`#7`, `#8`), `/api/check` (`#6`), and test suite (
 | _YYYY-MM-DD_ | _e.g. 1.1_ | _branch or PR #_ | _Summary of verification and remaining notes_ |
 | 2026-11-19 | 1.1–1.4 | `feat/issue-13-ci-prep` (Issue #13) | Aligned `engines.node` (`>=22.18.0`), multi-file `npm test` globs (`src/**/*.test.ts` / `src/**/*.spec.ts`), validation docs (`README.md`, `stack.md`, `testing.md`), and offline mock checks; verified on Node `v24.20.0` (`npm test`: 100/100 pass, `tsc`, `lint`, `build`). |
 | 2026-11-23 | 3.3 | Manual / Vercel | Connected Vercel GitHub App (`https://eshop-trust-checker.vercel.app`) with automatic PR previews; recorded in `docs/agents/stack.md` and commented on Issue #15. |
+| 2026-11-25 | 2.1–2.5 | `feat/issue-14-core-ci-workflow` (Issue #14) | Added `.github/workflows/ci.yml` with 40-char SHA-pinned `node24` actions, parallel `lint`/`typecheck`/`test`/`build` jobs, `.next/cache`, `$GITHUB_STEP_SUMMARY`, and offline `ci-workflow.test.ts`; Task `2.6` pending live PR check run. |
