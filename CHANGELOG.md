@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/tommardev/eshop-trust-checker/compare/v0.1.2...v0.1.3) (2026-11-25)
+
+
+### Features
+
+* CI: Add GitHub Actions PR workflow for lint, typecheck, test, and build ([#14](https://github.com/tommardev/eshop-trust-checker/issues/14)) ([#38](https://github.com/tommardev/eshop-trust-checker/issues/38)) ([6d1a7f1](https://github.com/tommardev/eshop-trust-checker/commit/6d1a7f19d7cadb4a26f142d1a2ed1f57e2d7e652))
+
 ## [0.1.2](https://github.com/tommardev/eshop-trust-checker/compare/v0.1.1...v0.1.2) (2026-11-24)
 
 
