@@ -43,5 +43,5 @@ Every planning issue must be self-contained so either a human, interactive agent
 
 - `repo:` **Canonical plan path:** `.agents/plans/issue-<N>-<slug>.md` (overrides generic `.claude/plans/`).
 - `repo:` **Branch naming:** `feat/issue-<N>-<slug>` or `fix/issue-<N>-<slug>`.
-- `repo:` **PR linking:** Include `Closes #<N>` (or `Fixes #<N>`) in the commit/PR body so merging closes the issue and unblocks the single-PR pipeline.
+- `repo:` **PR title & linking:** Use `<type>: <concise summary>` for PR titles **without** `(#<N>)` (GitHub squash-merge appends `(#<PR>)` automatically). Put `Closes #<N>` (or `Fixes #<N>`) in the PR/commit **body** so merging closes the issue and unblocks the single-PR pipeline.
 - `repo:` **Validation before PR:** `npx tsc --noEmit --incremental false`, `npm test`, `npm run lint`, and `npm run build` (see `docs/agents/stack.md`).
