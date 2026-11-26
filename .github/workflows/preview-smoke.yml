@@ -1,22 +1,28 @@
 # Post-deployment preview smoke check (docs/PR_CHECKS_AND_PREVIEW_ROADMAP.md Task 3.4).
-# Triggers on deployment_status success, validates target URL allowlist before sending
-# optional Vercel bypass headers, probes GET / (200) and POST /api/check SSRF blocking (400),
-# publishes commit status `smoke`, and writes a run summary.
+# Triggers on repository_dispatch (vercel.deployment.success) or deployment_status success,
+# validates target URL allowlist before sending optional Vercel bypass headers (scoped to
+# this project's *.vercel.app hosts), probes GET / (200) and POST /api/check SSRF blocking (400),
+# publishes commit status `smoke`, and writes a sanitized run summary.
 name: Preview Smoke Check
 
 on:
+  repository_dispatch:
+    types:
+      - vercel.deployment.success
   deployment_status: {}
 
 permissions: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.deployment.id }}
+  group: ${{ github.workflow }}-${{ github.event.client_payload.id || github.event.deployment.id || github.run_id }}
   cancel-in-progress: false
 
 jobs:
   smoke:
     name: smoke
-    if: github.event.deployment_status.state == 'success'
+    if: >-
+      (github.event_name == 'repository_dispatch' && github.event.action == 'vercel.deployment.success') ||
+      (github.event_name == 'deployment_status' && github.event.deployment_status.state == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -32,15 +38,16 @@ jobs:
       - name: Run preview smoke probe
         id: smoke-probe
         env:
-          TARGET_URL: ${{ github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
-          DEPLOYMENT_ENVIRONMENT: ${{ github.event.deployment_status.environment }}
+          TARGET_URL: ${{ github.event.client_payload.url || github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
+          DEPLOYMENT_ENVIRONMENT: ${{ github.event.client_payload.environment || github.event.deployment_status.environment }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
-          node <<'EOF'
+          node --input-type=module <<'EOF'
           import { appendFileSync } from 'node:fs';
 
           const HOSTNAME_ALLOWLIST_REGEX =
             /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:vercel\.app|netlify\.app)$/;
+          const VERCEL_BYPASS_HOST_REGEX = /^eshop-trust-checker(?:-[a-z0-9-]+)?\.vercel\.app$/;
           const RETRYABLE_STATUSES = new Set([404, 429, 502, 503, 504]);
           const DEFAULT_BACKOFF_MS = [2000, 4000, 6000, 8000];
           const MAX_ATTEMPTS = 5;
@@ -172,7 +179,7 @@ jobs:
             const baseHeaders = {
               Accept: 'text/html,application/json',
             };
-            if (bypassSecret && hostname.endsWith('.vercel.app')) {
+            if (bypassSecret && VERCEL_BYPASS_HOST_REGEX.test(hostname)) {
               baseHeaders['x-vercel-protection-bypass'] = bypassSecret;
             }
 
@@ -188,7 +195,13 @@ jobs:
             await homeRes.body?.cancel?.().catch(() => {});
             writeOutput('home_status', String(homeRes.status));
             if (homeRes.status !== 200) {
-              throw new Error(`GET ${origin}/ expected HTTP 200, got ${homeRes.status}.`);
+              const redirectHint =
+                homeRes.status >= 300 && homeRes.status < 400
+                  ? ' (unexpected redirect blocked; verify Deployment Protection / VERCEL_AUTOMATION_BYPASS_SECRET)'
+                  : '';
+              throw new Error(
+                `GET ${origin}/ expected HTTP 200, got ${homeRes.status}${redirectHint}.`,
+              );
             }
 
             const ssrfRes = await fetchWithRetry(
@@ -208,18 +221,28 @@ jobs:
             writeOutput('ssrf_status', String(ssrfRes.status));
             if (ssrfRes.status !== 400) {
               await ssrfRes.body?.cancel?.().catch(() => {});
+              const redirectHint =
+                ssrfRes.status >= 300 && ssrfRes.status < 400
+                  ? ' (unexpected redirect blocked; verify Deployment Protection / VERCEL_AUTOMATION_BYPASS_SECRET)'
+                  : '';
               throw new Error(
-                `POST ${origin}/api/check expected HTTP 400 for SSRF probe, got ${ssrfRes.status}.`,
+                `POST ${origin}/api/check expected HTTP 400 for SSRF probe, got ${ssrfRes.status}${redirectHint}.`,
               );
             }
 
-            const contentType = (ssrfRes.headers.get('content-type') || '').toLowerCase();
-            const rawBody = await ssrfRes.text();
+            const contentType = (ssrfRes.headers.get('content-type') || '')
+              .split(';')[0]
+              .trim()
+              .toLowerCase()
+              .slice(0, 64);
             if (!contentType.includes('application/json')) {
+              await ssrfRes.body?.cancel?.().catch(() => {});
               throw new Error(
                 `POST ${origin}/api/check expected application/json response, got "${contentType || 'none'}".`,
               );
             }
+
+            const rawBody = await ssrfRes.text();
 
             let parsedBody;
             try {
@@ -260,18 +283,27 @@ jobs:
 
       - name: Publish smoke commit status
         id: commit-status
-        if: always()
+        if: success() || failure()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          DEPLOYMENT_SHA: ${{ github.event.deployment.sha }}
+          DEPLOYMENT_SHA: ${{ github.event.client_payload.git.sha || github.event.deployment.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           SMOKE_OUTCOME: ${{ steps.smoke-probe.outcome }}
           SMOKE_DETAIL: ${{ steps.smoke-probe.outputs.detail }}
         run: |
-          node <<'EOF'
+          node --input-type=module <<'EOF'
+          const token = (process.env.GITHUB_TOKEN || '').trim();
+
+          function sanitizeError(value) {
+            let text = String(value ?? '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+            if (token && text.includes(token)) {
+              text = text.split(token).join('[REDACTED]');
+            }
+            return text;
+          }
+
           async function publishCommitStatus() {
-            const token = (process.env.GITHUB_TOKEN || '').trim();
             const repo = (process.env.GITHUB_REPOSITORY || '').trim();
             const sha = (process.env.DEPLOYMENT_SHA || '').trim();
             const runUrl = (process.env.RUN_URL || '').trim();
@@ -288,11 +320,19 @@ jobs:
               throw new Error('Invalid DEPLOYMENT_SHA format.');
             }
 
-            const state = outcome === 'success' ? 'success' : 'failure';
-            const fallbackDescription =
-              state === 'success'
-                ? 'Preview smoke checks passed.'
-                : 'Preview smoke checks failed.';
+            let state;
+            let fallbackDescription;
+            if (outcome === 'success') {
+              state = 'success';
+              fallbackDescription = 'Preview smoke checks passed.';
+            } else if (outcome === 'failure') {
+              state = 'failure';
+              fallbackDescription = 'Preview smoke checks failed.';
+            } else {
+              state = 'error';
+              fallbackDescription = 'Preview smoke check did not run (setup failed).';
+            }
+
             const rawDescription = detail || fallbackDescription;
             const description =
               rawDescription.length > 140
@@ -321,7 +361,7 @@ jobs:
             );
 
             if (!response.ok) {
-              const errorBody = (await response.text()).slice(0, 300);
+              const errorBody = sanitizeError(await response.text()).slice(0, 300);
               throw new Error(
                 `Failed to publish commit status (HTTP ${response.status}): ${errorBody}`,
               );
@@ -329,7 +369,7 @@ jobs:
           }
 
           publishCommitStatus().catch((error) => {
-            console.error(error instanceof Error ? error.message : String(error));
+            console.error(sanitizeError(error instanceof Error ? error.message : String(error)));
             process.exitCode = 1;
           });
           EOF
@@ -338,9 +378,10 @@ jobs:
         if: always()
         env:
           EVENT_NAME: ${{ github.event_name }}
-          DEPLOYMENT_ENVIRONMENT: ${{ github.event.deployment_status.environment }}
-          DEPLOYMENT_STATE: ${{ github.event.deployment_status.state }}
-          DEPLOYMENT_SHA: ${{ github.event.deployment.sha }}
+          EVENT_ACTION: ${{ github.event.action }}
+          DEPLOYMENT_ENVIRONMENT: ${{ github.event.client_payload.environment || github.event.deployment_status.environment }}
+          DEPLOYMENT_STATE: ${{ github.event.client_payload.state.type || github.event.deployment_status.state }}
+          DEPLOYMENT_SHA: ${{ github.event.client_payload.git.sha || github.event.deployment.sha }}
           NODE_VERSION: ${{ steps.setup-node.outputs.node-version }}
           VALIDATED_ORIGIN: ${{ steps.smoke-probe.outputs.validated_origin }}
           HOME_STATUS: ${{ steps.smoke-probe.outputs.home_status }}
@@ -349,20 +390,28 @@ jobs:
           STATUS_OUTCOME: ${{ steps.commit-status.outcome }}
           PROBE_DETAIL: ${{ steps.smoke-probe.outputs.detail }}
         run: |
+          sanitize_cell() {
+            printf '%s' "${1-}" \
+              | tr '\r\n\t' '   ' \
+              | tr -s ' ' \
+              | sed -e 's/^ //' -e 's/ $//' -e 's/|/\\|/g' -e 's/`/\\`/g' -e 's/</\\</g' -e 's/>/\\>/g'
+          }
+
           {
             echo "### Preview Smoke Summary"
             echo ""
             echo "| Field | Value |"
             echo "| --- | --- |"
-            echo "| Trigger | \`${EVENT_NAME}\` |"
-            echo "| Environment | \`${DEPLOYMENT_ENVIRONMENT:-n/a}\` |"
-            echo "| Deployment state | \`${DEPLOYMENT_STATE:-n/a}\` |"
-            echo "| Deployment SHA | \`${DEPLOYMENT_SHA:-n/a}\` |"
-            echo "| Node.js | \`${NODE_VERSION:-n/a}\` |"
-            echo "| Validated origin | \`${VALIDATED_ORIGIN:-n/a}\` |"
-            echo "| GET / status | \`${HOME_STATUS:-n/a}\` |"
-            echo "| POST /api/check SSRF status | \`${SSRF_STATUS:-n/a}\` |"
-            echo "| Smoke probe | \`${PROBE_OUTCOME:-skipped}\` |"
-            echo "| Commit status (smoke) | \`${STATUS_OUTCOME:-skipped}\` |"
-            echo "| Detail | ${PROBE_DETAIL:-n/a} |"
+            echo "| Trigger | \`$(sanitize_cell "${EVENT_NAME:-n/a}")\` |"
+            echo "| Event action | \`$(sanitize_cell "${EVENT_ACTION:-n/a}")\` |"
+            echo "| Environment | \`$(sanitize_cell "${DEPLOYMENT_ENVIRONMENT:-n/a}")\` |"
+            echo "| Deployment state | \`$(sanitize_cell "${DEPLOYMENT_STATE:-n/a}")\` |"
+            echo "| Deployment SHA | \`$(sanitize_cell "${DEPLOYMENT_SHA:-n/a}")\` |"
+            echo "| Node.js | \`$(sanitize_cell "${NODE_VERSION:-n/a}")\` |"
+            echo "| Validated origin | \`$(sanitize_cell "${VALIDATED_ORIGIN:-n/a}")\` |"
+            echo "| GET / status | \`$(sanitize_cell "${HOME_STATUS:-n/a}")\` |"
+            echo "| POST /api/check SSRF status | \`$(sanitize_cell "${SSRF_STATUS:-n/a}")\` |"
+            echo "| Smoke probe | \`$(sanitize_cell "${PROBE_OUTCOME:-skipped}")\` |"
+            echo "| Commit status (smoke) | \`$(sanitize_cell "${STATUS_OUTCOME:-skipped}")\` |"
+            echo "| Detail | $(sanitize_cell "${PROBE_DETAIL:-n/a}") |"
           } | tee -a "$GITHUB_STEP_SUMMARY"

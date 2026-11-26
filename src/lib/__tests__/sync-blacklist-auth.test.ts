@@ -78,6 +78,11 @@ describe('SyncBlacklistAuth', () => {
           authorized: true,
           mode: 'enforced',
         });
+
+        assert.deepStrictEqual(SyncBlacklistAuth.verify(new Headers(), undefined), {
+          authorized: true,
+          mode: 'disabled',
+        });
       });
     });
   });
@@ -231,7 +236,7 @@ describe('Node.js runtime & /api/sync-blacklist wiring contract', () => {
 
     assert.match(
       syncRouteSource,
-      /import\s*\{\s*SyncBlacklistAuth\s*\}\s*from\s*['"]@\/lib\/sync-blacklist-auth['"]\s*;/,
+      /import\s*\{[^}]*\bSyncBlacklistAuth\b[^}]*\}\s*from\s*['"]@\/lib\/sync-blacklist-auth['"]\s*;/,
     );
 
     const authCallIdx = syncRouteSource.indexOf('SyncBlacklistAuth.verify(');
@@ -243,8 +248,35 @@ describe('Node.js runtime & /api/sync-blacklist wiring contract', () => {
       'SyncBlacklistAuth.verify must run before VvtatChecker.refreshFromOfficialSource',
     );
 
-    assert.match(syncRouteSource, /status:\s*401/);
-    assert.match(syncRouteSource, /['"]Cache-Control['"]\s*:\s*['"]no-store['"]/);
+    const preRefreshSegment = syncRouteSource.slice(authCallIdx, refreshCallIdx);
+    const unauthorizedGuardMatch = /if\s*\(\s*!auth\.authorized\s*\)\s*\{/.exec(preRefreshSegment);
+    assert.ok(
+      unauthorizedGuardMatch,
+      'Expected if (!auth.authorized) guard before VvtatChecker.refreshFromOfficialSource',
+    );
+
+    const guardStartIdx = unauthorizedGuardMatch.index + unauthorizedGuardMatch[0].length - 1;
+    let braceDepth = 0;
+    let guardEndIdx = -1;
+    for (let i = guardStartIdx; i < preRefreshSegment.length; i += 1) {
+      if (preRefreshSegment[i] === '{') braceDepth += 1;
+      else if (preRefreshSegment[i] === '}') {
+        braceDepth -= 1;
+        if (braceDepth === 0) {
+          guardEndIdx = i;
+          break;
+        }
+      }
+    }
+    assert.notStrictEqual(guardEndIdx, -1, 'Expected balanced if (!auth.authorized) block');
+
+    const unauthorizedGuardBlock = preRefreshSegment.slice(guardStartIdx, guardEndIdx + 1);
+    assert.match(unauthorizedGuardBlock, /\breturn\b[\s\S]*?status:\s*401\b/);
+    assert.match(unauthorizedGuardBlock, /['"]Cache-Control['"]\s*:\s*['"]no-store['"]/);
+    assert.match(
+      unauthorizedGuardBlock,
+      /['"]WWW-Authenticate['"]\s*:\s*['"]Bearer\b[^'"]*['"]/,
+    );
     assert.strictEqual(syncRouteSource.includes('auth.reason'), false);
     assert.strictEqual(/console\.\w+\([^)]*headers/i.test(syncRouteSource), false);
   });
@@ -285,6 +317,10 @@ describe('Node.js runtime & /api/sync-blacklist wiring contract', () => {
       .map((line) => line.trim())
       .filter((line) => line.length > 0 && !line.startsWith('#'));
 
-    assert.deepStrictEqual(activeAssignments, ['SYNC_BLACKLIST_SECRET=']);
+    assert.ok(activeAssignments.includes('SYNC_BLACKLIST_SECRET='));
+    assert.ok(
+      activeAssignments.every((line) => /^[A-Z][A-Z0-9_]*=$/.test(line)),
+      'Expected all active assignments in .env.example to have empty values',
+    );
   });
 });

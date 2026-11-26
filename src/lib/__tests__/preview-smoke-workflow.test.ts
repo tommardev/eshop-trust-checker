@@ -17,6 +17,7 @@ type MockFetchStep =
       status: number;
       headers?: Record<string, string>;
       body?: string;
+      failOnBodyRead?: boolean;
     }
   | {
       type: 'throw';
@@ -298,29 +299,34 @@ function extractRunBlocks(lines: string[]): RunBlock[] {
   return blocks;
 }
 
-function extractSmokeProbeScript(): string {
-  const lines = splitLines(readWorkflowText());
+function extractEmbeddedNodeScript(workflowText: string, stepId: string): string {
+  const lines = splitLines(workflowText);
   const jobs = extractJobs(lines);
   const smokeJob = jobs.get('smoke');
   assert.ok(smokeJob, 'Expected smoke job to exist');
 
   const steps = extractJobSteps(smokeJob);
-  const probeStep = steps.find((step) =>
-    step.some((line) => /^\s+id:\s*smoke-probe\s*$/.test(line)),
-  );
-  assert.ok(probeStep, 'Expected smoke-probe step to exist');
+  const idPattern = new RegExp(`^\\s+id:\\s*${stepId}\\s*$`);
+  const targetStep = steps.find((step) => step.some((line) => idPattern.test(line)));
+  assert.ok(targetStep, `Expected ${stepId} step to exist`);
 
-  const runBlocks = extractRunBlocks(probeStep);
-  assert.strictEqual(runBlocks.length, 1, 'Expected smoke-probe step to have 1 run: block');
+  const runBlocks = extractRunBlocks(targetStep);
+  assert.strictEqual(runBlocks.length, 1, `Expected ${stepId} step to have 1 run: block`);
 
   const runLines = splitLines(runBlocks[0].content);
-  const startIdx = runLines.findIndex((line) => /^\s*node\s+<<\s*'EOF'\s*$/.test(line));
-  assert.notStrictEqual(startIdx, -1, "Expected node <<'EOF' in smoke-probe run block");
+  const startIdx = runLines.findIndex((line) =>
+    /^\s*node(?:\s+--input-type=module)?\s+<<\s*'EOF'\s*$/.test(line),
+  );
+  assert.notStrictEqual(
+    startIdx,
+    -1,
+    `Expected node [--input-type=module] <<'EOF' in ${stepId} run block`,
+  );
 
   const endIdx = runLines.findIndex(
     (line, index) => index > startIdx && /^\s*EOF\s*$/.test(line),
   );
-  assert.notStrictEqual(endIdx, -1, 'Expected closing EOF in smoke-probe run block');
+  assert.notStrictEqual(endIdx, -1, `Expected closing EOF in ${stepId} run block`);
 
   const rawBodyLines = runLines.slice(startIdx + 1, endIdx);
   const nonEmptyIndents = rawBodyLines
@@ -347,14 +353,12 @@ function parseGithubOutputs(rawText: string): Record<string, string> {
   return outputs;
 }
 
-function runEmbeddedSmokeProbe(options: {
+function runEmbeddedNodeScript(options: {
   scriptSource: string;
-  targetUrl?: string;
-  deploymentEnvironment?: string;
-  bypassSecret?: string;
+  envOverrides: Record<string, string | undefined>;
   mockSteps: MockFetchStep[];
 }): ProbeExecutionResult {
-  const tempDir = mkdtempSync(path.join(tmpdir(), 'preview-smoke-probe-'));
+  const tempDir = mkdtempSync(path.join(tmpdir(), 'preview-smoke-script-'));
   const outputPath = path.join(tempDir, 'github-output.txt');
   const tracePath = path.join(tempDir, 'fetch-trace.json');
 
@@ -395,10 +399,15 @@ function runEmbeddedSmokeProbe(options: {
       "  if (step.type === 'throw') {",
       '    throw new Error(step.message);',
       '  }',
-      '  return new Response(step.body ?? null, {',
+      '  const response = new Response(step.body ?? null, {',
       '    status: step.status,',
       '    headers: step.headers ?? {},',
       '  });',
+      '  if (step.failOnBodyRead) {',
+      "    response.text = async () => { throw new Error('Response body must not be read'); };",
+      "    response.json = async () => { throw new Error('Response body must not be read'); };",
+      '  }',
+      '  return response;',
       '};',
       `const __scriptBase64 = ${JSON.stringify(scriptBase64)};`,
       "await import('data:text/javascript;base64,' + __scriptBase64);",
@@ -407,25 +416,14 @@ function runEmbeddedSmokeProbe(options: {
     const childEnv: NodeJS.ProcessEnv = {
       ...process.env,
       GITHUB_OUTPUT: outputPath,
-      SMOKE_BACKOFF_MS: '0,0,0,0',
     };
 
-    if (options.targetUrl === undefined) {
-      delete childEnv.TARGET_URL;
-    } else {
-      childEnv.TARGET_URL = options.targetUrl;
-    }
-
-    if (options.deploymentEnvironment === undefined) {
-      delete childEnv.DEPLOYMENT_ENVIRONMENT;
-    } else {
-      childEnv.DEPLOYMENT_ENVIRONMENT = options.deploymentEnvironment;
-    }
-
-    if (options.bypassSecret === undefined) {
-      delete childEnv.VERCEL_AUTOMATION_BYPASS_SECRET;
-    } else {
-      childEnv.VERCEL_AUTOMATION_BYPASS_SECRET = options.bypassSecret;
+    for (const [key, value] of Object.entries(options.envOverrides)) {
+      if (value === undefined) {
+        delete childEnv[key];
+      } else {
+        childEnv[key] = value;
+      }
     }
 
     const result = spawnSync(process.execPath, ['--input-type=module', '-e', harness], {
@@ -459,8 +457,51 @@ function runEmbeddedSmokeProbe(options: {
   }
 }
 
+function runEmbeddedSmokeProbe(options: {
+  scriptSource: string;
+  targetUrl?: string;
+  deploymentEnvironment?: string;
+  bypassSecret?: string;
+  mockSteps: MockFetchStep[];
+}): ProbeExecutionResult {
+  return runEmbeddedNodeScript({
+    scriptSource: options.scriptSource,
+    envOverrides: {
+      SMOKE_BACKOFF_MS: '0,0,0,0',
+      TARGET_URL: options.targetUrl,
+      DEPLOYMENT_ENVIRONMENT: options.deploymentEnvironment,
+      VERCEL_AUTOMATION_BYPASS_SECRET: options.bypassSecret,
+    },
+    mockSteps: options.mockSteps,
+  });
+}
+
+function runEmbeddedCommitStatus(options: {
+  scriptSource: string;
+  githubToken?: string;
+  githubRepository?: string;
+  deploymentSha?: string;
+  runUrl?: string;
+  smokeOutcome?: string;
+  smokeDetail?: string;
+  mockSteps: MockFetchStep[];
+}): ProbeExecutionResult {
+  return runEmbeddedNodeScript({
+    scriptSource: options.scriptSource,
+    envOverrides: {
+      GITHUB_TOKEN: options.githubToken,
+      GITHUB_REPOSITORY: options.githubRepository,
+      DEPLOYMENT_SHA: options.deploymentSha,
+      RUN_URL: options.runUrl,
+      SMOKE_OUTCOME: options.smokeOutcome,
+      SMOKE_DETAIL: options.smokeDetail,
+    },
+    mockSteps: options.mockSteps,
+  });
+}
+
 describe('Suite A: .github/workflows/preview-smoke.yml YAML & hardening contract', () => {
-  it('exists, uses spaces without tabs, names Preview Smoke Check, and triggers only on deployment_status', () => {
+  it('exists, uses spaces without tabs, names Preview Smoke Check, and triggers only on repository_dispatch (vercel.deployment.success) and deployment_status', () => {
     assert.strictEqual(
       existsSync(WORKFLOW_PATH),
       true,
@@ -488,22 +529,32 @@ describe('Suite A: .github/workflows/preview-smoke.yml YAML & hardening contract
     const onBlock = extractIndentedBlock(lines, 0, 'on');
     assert.ok(onBlock.length > 0, 'preview-smoke.yml must define an on: trigger block');
 
+    const topLevelTriggers = onBlock
+      .slice(1)
+      .filter((line) => /^  [a-zA-Z0-9_-]+:/.test(line))
+      .map((line) => line.trim().split(':')[0])
+      .sort();
+    assert.deepStrictEqual(
+      topLevelTriggers,
+      ['deployment_status', 'repository_dispatch'],
+      'preview-smoke.yml on: block must only define repository_dispatch and deployment_status',
+    );
+
+    const dispatchBlock = extractIndentedBlock(onBlock, 2, 'repository_dispatch');
+    assert.ok(
+      dispatchBlock.some((line) => /^\s+-\s*vercel\.deployment\.success\s*$/.test(line)),
+      'repository_dispatch trigger must subscribe to vercel.deployment.success',
+    );
+
     const deploymentStatusBlock = extractIndentedBlock(onBlock, 2, 'deployment_status');
     assert.ok(
       deploymentStatusBlock.length > 0 &&
         /^\s+deployment_status:(?:\s*\{\})?\s*(?:#.*)?$/.test(deploymentStatusBlock[0]),
       'preview-smoke.yml must trigger on deployment_status',
     );
-
-    const activeOnEntries = onBlock.slice(1).filter((line) => !isBlankOrComment(line));
-    assert.strictEqual(
-      activeOnEntries.length,
-      1,
-      'preview-smoke.yml on: block must only define deployment_status',
-    );
   });
 
-  it('enforces top-level permissions: {}, single smoke job, timeout-minutes: 5, and minimal job permissions', () => {
+  it('enforces top-level permissions: {}, single smoke job, dual trigger guard, timeout-minutes: 5, and minimal job permissions', () => {
     const workflowText = readWorkflowText();
     const lines = splitLines(workflowText);
 
@@ -524,11 +575,11 @@ describe('Suite A: .github/workflows/preview-smoke.yml YAML & hardening contract
     const concurrencyBlock = extractIndentedBlock(lines, 0, 'concurrency');
     assert.ok(
       concurrencyBlock.some((line) =>
-        /^\s+group:\s*\$\{\{\s*github\.workflow\s*\}\}-\$\{\{\s*github\.event\.deployment\.id\s*\}\}\s*$/.test(
+        /^\s+group:\s*\$\{\{\s*github\.workflow\s*\}\}-\$\{\{\s*github\.event\.client_payload\.id\s*\|\|\s*github\.event\.deployment\.id\s*\|\|\s*github\.run_id\s*\}\}\s*$/.test(
           line,
         ),
       ),
-      'concurrency.group must scope to workflow and deployment.id',
+      'concurrency.group must scope to workflow and client_payload.id || deployment.id || run_id',
     );
     assert.ok(
       concurrencyBlock.some((line) => /^\s+cancel-in-progress:\s*false\s*$/.test(line)),
@@ -541,12 +592,26 @@ describe('Suite A: .github/workflows/preview-smoke.yml YAML & hardening contract
     const smokeJob = jobs.get('smoke');
     assert.ok(smokeJob);
     assert.ok(smokeJob.some((line) => /^    name:\s*smoke\s*$/.test(line)));
+
+    const jobIfBlock = extractIndentedBlock(smokeJob, 4, 'if');
+    assert.ok(jobIfBlock.length > 0, 'smoke job must define an if: guard');
+    const normalizedJobIf = jobIfBlock
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
     assert.ok(
-      smokeJob.some((line) =>
-        /^    if:\s*github\.event\.deployment_status\.state\s*==\s*'success'\s*$/.test(line),
+      normalizedJobIf.includes(
+        "github.event_name == 'repository_dispatch' && github.event.action == 'vercel.deployment.success'",
       ),
-      "smoke job must guard on github.event.deployment_status.state == 'success'",
+      'smoke job if: must guard repository_dispatch vercel.deployment.success',
     );
+    assert.ok(
+      normalizedJobIf.includes(
+        "github.event_name == 'deployment_status' && github.event.deployment_status.state == 'success'",
+      ),
+      "smoke job if: must guard deployment_status state == 'success'",
+    );
+
     assert.ok(smokeJob.some((line) => /^    runs-on:\s*ubuntu-latest\s*$/.test(line)));
     assert.ok(smokeJob.some((line) => /^    timeout-minutes:\s*5\s*$/.test(line)));
 
@@ -585,7 +650,7 @@ describe('Suite A: .github/workflows/preview-smoke.yml YAML & hardening contract
     assert.ok(setupStep.some((line) => /^\s+node-version:\s*['"]24['"]\s*$/.test(line)));
   });
 
-  it('wires smoke-probe, commit-status, and summary steps via env: with zero inline ${{ in run: blocks', () => {
+  it('wires smoke-probe, commit-status, and sanitized summary steps via env: with zero inline ${{ in run: blocks', () => {
     const lines = splitLines(readWorkflowText());
     const smokeJob = extractJobs(lines).get('smoke');
     assert.ok(smokeJob);
@@ -599,12 +664,12 @@ describe('Suite A: .github/workflows/preview-smoke.yml YAML & hardening contract
     assert.ok(probeStep, 'Expected smoke-probe step');
     const probeEnv = extractIndentedBlock(probeStep, 8, 'env');
     assert.ok(
-      probeEnv.some(
-        (line) =>
-          /^\s+TARGET_URL:\s*/.test(line) &&
-          line.includes('github.event.deployment_status.target_url'),
+      probeEnv.some((line) =>
+        /^\s+TARGET_URL:\s*\$\{\{\s*github\.event\.client_payload\.url\s*\|\|\s*github\.event\.deployment_status\.environment_url\s*\|\|\s*github\.event\.deployment_status\.target_url\s*\}\}\s*$/.test(
+          line,
+        ),
       ),
-      'smoke-probe must pass TARGET_URL referencing github.event.deployment_status.target_url via env:',
+      'smoke-probe TARGET_URL must resolve client_payload.url || deployment_status.environment_url || deployment_status.target_url',
     );
     assert.ok(
       probeEnv.some((line) =>
@@ -614,24 +679,30 @@ describe('Suite A: .github/workflows/preview-smoke.yml YAML & hardening contract
       ),
       'smoke-probe must pass VERCEL_AUTOMATION_BYPASS_SECRET via env:',
     );
+    const probeRuns = extractRunBlocks(probeStep);
+    assert.strictEqual(probeRuns.length, 1);
+    assert.match(probeRuns[0].content, /node\s+--input-type=module\s+<<'EOF'/);
 
     const commitStatusStep = steps.find((step) =>
       step.some((line) => /^\s+id:\s*commit-status\s*$/.test(line)),
     );
     assert.ok(commitStatusStep, 'Expected commit-status step');
     assert.ok(
-      commitStatusStep.some((line) => /^\s+if:\s*always\(\)\s*$/.test(line)),
-      'commit-status step must set if: always()',
+      commitStatusStep.some((line) => /^\s+if:\s*success\(\)\s*\|\|\s*failure\(\)\s*$/.test(line)),
+      'commit-status step must set if: success() || failure()',
     );
     const statusEnv = extractIndentedBlock(commitStatusStep, 8, 'env');
     assert.ok(
       statusEnv.some((line) =>
-        /^\s+DEPLOYMENT_SHA:\s*\$\{\{\s*github\.event\.deployment\.sha\s*\}\}\s*$/.test(line),
+        /^\s+DEPLOYMENT_SHA:\s*\$\{\{\s*github\.event\.client_payload\.git\.sha\s*\|\|\s*github\.event\.deployment\.sha\s*\}\}\s*$/.test(
+          line,
+        ),
       ),
-      'commit-status must pass DEPLOYMENT_SHA: ${{ github.event.deployment.sha }} via env:',
+      'commit-status DEPLOYMENT_SHA must resolve client_payload.git.sha || deployment.sha via env:',
     );
     const statusRuns = extractRunBlocks(commitStatusStep);
     assert.strictEqual(statusRuns.length, 1);
+    assert.match(statusRuns[0].content, /node\s+--input-type=module\s+<<'EOF'/);
     assert.ok(statusRuns[0].content.includes('/statuses/'));
     assert.match(statusRuns[0].content, /context:\s*['"]smoke['"]/);
 
@@ -644,6 +715,15 @@ describe('Suite A: .github/workflows/preview-smoke.yml YAML & hardening contract
 
     const summaryEnv = extractIndentedBlock(summaryStep, 8, 'env');
     assert.ok(summaryEnv.length >= 2 && summaryEnv.slice(1).some((line) => /\$\{\{/.test(line)));
+    assert.ok(summaryEnv.some((line) => /^\s+EVENT_ACTION:\s*/.test(line)));
+    assert.ok(summaryEnv.some((line) => /^\s+DEPLOYMENT_ENVIRONMENT:\s*/.test(line)));
+    assert.ok(summaryEnv.some((line) => /^\s+DEPLOYMENT_STATE:\s*/.test(line)));
+    assert.ok(summaryEnv.some((line) => /^\s+DEPLOYMENT_SHA:\s*/.test(line)));
+
+    const summaryRuns = extractRunBlocks(summaryStep);
+    assert.strictEqual(summaryRuns.length, 1);
+    assert.match(summaryRuns[0].content, /sanitize_cell\s*\(\)/);
+    assert.ok(summaryRuns[0].content.includes('$(sanitize_cell '));
 
     const summaryText = summaryStep.join('\n');
     assert.strictEqual(summaryText.includes('VERCEL_AUTOMATION_BYPASS_SECRET'), false);
@@ -663,7 +743,7 @@ describe('Suite A: .github/workflows/preview-smoke.yml YAML & hardening contract
 });
 
 describe('Suite B: Embedded smoke-probe script offline execution (mocked fetch)', () => {
-  const scriptSource = extractSmokeProbeScript();
+  const scriptSource = extractEmbeddedNodeScript(readWorkflowText(), 'smoke-probe');
 
   it('rejects disallowed, spoofed, non-HTTPS, userinfo, custom-port, and empty TARGET_URLs before any fetch', () => {
     const rejectedTargets: Array<string | undefined> = [
@@ -798,7 +878,46 @@ describe('Suite B: Embedded smoke-probe script offline execution (mocked fetch)'
     assert.strictEqual(res.outputs.ssrf_status, '400');
   });
 
-  it('prevents false passes on proxy 400 HTML responses and generic 400 JSON lacking ssrf', () => {
+  it('isolates Vercel bypass secret from unrelated *.vercel.app projects', () => {
+    const bypassSecret = 'vercel-bypass-secret-123';
+    const res = runEmbeddedSmokeProbe({
+      scriptSource,
+      targetUrl: 'https://other-project.vercel.app',
+      deploymentEnvironment: 'Preview',
+      bypassSecret,
+      mockSteps: [
+        {
+          type: 'response',
+          status: 200,
+          headers: { 'content-type': 'text/html' },
+          body: '<html>OK</html>',
+        },
+        {
+          type: 'response',
+          status: 400,
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ error: 'SSRF apsauga' }),
+        },
+      ],
+    });
+
+    assert.strictEqual(res.exitCode, 0, `Expected exit 0, stderr: ${res.stderr}`);
+    assert.strictEqual(res.unexpectedCallError, null);
+    assert.strictEqual(res.fetchCalls.length, 2);
+
+    for (const call of res.fetchCalls) {
+      assert.strictEqual(
+        'x-vercel-protection-bypass' in call.headers,
+        false,
+        `Did not expect x-vercel-protection-bypass header on unrelated Vercel host (${call.url})`,
+      );
+      assert.strictEqual(call.redirect, 'manual');
+    }
+
+    assert.strictEqual(res.outputs.validated_origin, 'https://other-project.vercel.app');
+  });
+
+  it('prevents false passes on proxy 400 HTML (checking Content-Type before body read), malformed JSON, generic 400 JSON, and SSRF 200 regression', () => {
     const html400 = runEmbeddedSmokeProbe({
       scriptSource,
       targetUrl: 'https://eshop-trust-checker-pr-15.vercel.app',
@@ -812,8 +931,9 @@ describe('Suite B: Embedded smoke-probe script offline execution (mocked fetch)'
         {
           type: 'response',
           status: 400,
-          headers: { 'content-type': 'text/html' },
+          headers: { 'content-type': 'text/html; charset=utf-8' },
           body: '<html><body>400 Bad Request</body></html>',
+          failOnBodyRead: true,
         },
       ],
     });
@@ -821,7 +941,31 @@ describe('Suite B: Embedded smoke-probe script offline execution (mocked fetch)'
     assert.notStrictEqual(html400.exitCode, 0);
     assert.strictEqual(html400.unexpectedCallError, null);
     assert.strictEqual(html400.outputs.ssrf_status, '400');
-    assert.match(html400.outputs.detail ?? '', /application\/json/i);
+    assert.match(html400.outputs.detail ?? '', /application\/json.*"text\/html"/i);
+
+    const malformedJson400 = runEmbeddedSmokeProbe({
+      scriptSource,
+      targetUrl: 'https://eshop-trust-checker-pr-15.vercel.app',
+      mockSteps: [
+        {
+          type: 'response',
+          status: 200,
+          headers: { 'content-type': 'text/html' },
+          body: '<html>OK</html>',
+        },
+        {
+          type: 'response',
+          status: 400,
+          headers: { 'content-type': 'application/json' },
+          body: '{not-json',
+        },
+      ],
+    });
+
+    assert.notStrictEqual(malformedJson400.exitCode, 0);
+    assert.strictEqual(malformedJson400.unexpectedCallError, null);
+    assert.strictEqual(malformedJson400.outputs.ssrf_status, '400');
+    assert.match(malformedJson400.outputs.detail ?? '', /invalid json/i);
 
     const genericJson400 = runEmbeddedSmokeProbe({
       scriptSource,
@@ -846,9 +990,68 @@ describe('Suite B: Embedded smoke-probe script offline execution (mocked fetch)'
     assert.strictEqual(genericJson400.unexpectedCallError, null);
     assert.strictEqual(genericJson400.outputs.ssrf_status, '400');
     assert.match(genericJson400.outputs.detail ?? '', /ssrf/i);
+
+    const ssrfRegression200 = runEmbeddedSmokeProbe({
+      scriptSource,
+      targetUrl: 'https://eshop-trust-checker-pr-15.vercel.app',
+      mockSteps: [
+        {
+          type: 'response',
+          status: 200,
+          headers: { 'content-type': 'text/html' },
+          body: '<html>OK</html>',
+        },
+        {
+          type: 'response',
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ trustScore: 80 }),
+        },
+      ],
+    });
+
+    assert.notStrictEqual(ssrfRegression200.exitCode, 0);
+    assert.strictEqual(ssrfRegression200.unexpectedCallError, null);
+    assert.strictEqual(ssrfRegression200.outputs.ssrf_status, '200');
+    assert.match(ssrfRegression200.outputs.detail ?? '', /expected HTTP 400.*got 200/i);
   });
 
-  it('retries transient 503/network errors and fails fast on 401 without leaking secret', () => {
+  it('fails fast on 3xx redirects with Deployment Protection hint and fails on GET / 500', () => {
+    const redirect307 = runEmbeddedSmokeProbe({
+      scriptSource,
+      targetUrl: 'https://eshop-trust-checker-pr-15.vercel.app',
+      mockSteps: [
+        {
+          type: 'response',
+          status: 307,
+          headers: { location: 'https://vercel.com/login?token=sensitive' },
+        },
+      ],
+    });
+
+    assert.notStrictEqual(redirect307.exitCode, 0);
+    assert.strictEqual(redirect307.unexpectedCallError, null);
+    assert.strictEqual(redirect307.fetchCalls.length, 1);
+    assert.strictEqual(redirect307.fetchCalls[0].redirect, 'manual');
+    assert.strictEqual(redirect307.outputs.home_status, '307');
+    assert.match(redirect307.outputs.detail ?? '', /Deployment Protection/);
+    assert.match(redirect307.outputs.detail ?? '', /VERCEL_AUTOMATION_BYPASS_SECRET/);
+    assert.strictEqual((redirect307.outputs.detail ?? '').includes('token=sensitive'), false);
+
+    const home500 = runEmbeddedSmokeProbe({
+      scriptSource,
+      targetUrl: 'https://eshop-trust-checker-pr-15.vercel.app',
+      mockSteps: [{ type: 'response', status: 500, body: 'Internal Server Error' }],
+    });
+
+    assert.notStrictEqual(home500.exitCode, 0);
+    assert.strictEqual(home500.unexpectedCallError, null);
+    assert.strictEqual(home500.fetchCalls.length, 1);
+    assert.strictEqual(home500.outputs.home_status, '500');
+    assert.match(home500.outputs.detail ?? '', /expected HTTP 200, got 500/i);
+  });
+
+  it('retries transient 503/network errors, exhausts after 5 attempts, and fails fast on 401/403 without leaking secret', () => {
     const retry503 = runEmbeddedSmokeProbe({
       scriptSource,
       targetUrl: 'https://eshop-trust-checker-pr-15.vercel.app',
@@ -893,6 +1096,21 @@ describe('Suite B: Embedded smoke-probe script offline execution (mocked fetch)'
     assert.strictEqual(retryThrown.unexpectedCallError, null);
     assert.strictEqual(retryThrown.fetchCalls.length, 3);
 
+    const exhausted503 = runEmbeddedSmokeProbe({
+      scriptSource,
+      targetUrl: 'https://eshop-trust-checker-pr-15.vercel.app',
+      mockSteps: Array.from({ length: 5 }, () => ({
+        type: 'response' as const,
+        status: 503,
+        body: 'Service Unavailable',
+      })),
+    });
+
+    assert.notStrictEqual(exhausted503.exitCode, 0);
+    assert.strictEqual(exhausted503.unexpectedCallError, null);
+    assert.strictEqual(exhausted503.fetchCalls.length, 5);
+    assert.strictEqual(exhausted503.outputs.home_status, '503');
+
     const secret = 'very-sensitive-bypass-secret-value';
     const failFast401 = runEmbeddedSmokeProbe({
       scriptSource,
@@ -908,5 +1126,168 @@ describe('Suite B: Embedded smoke-probe script offline execution (mocked fetch)'
     assert.strictEqual(failFast401.stdout.includes(secret), false);
     assert.strictEqual(failFast401.stderr.includes(secret), false);
     assert.strictEqual((failFast401.outputs.detail ?? '').includes(secret), false);
+
+    const failFast403 = runEmbeddedSmokeProbe({
+      scriptSource,
+      targetUrl: 'https://eshop-trust-checker-pr-15.vercel.app',
+      bypassSecret: undefined,
+      mockSteps: [{ type: 'response', status: 403, body: 'Forbidden' }],
+    });
+
+    assert.notStrictEqual(failFast403.exitCode, 0);
+    assert.strictEqual(failFast403.unexpectedCallError, null);
+    assert.strictEqual(failFast403.fetchCalls.length, 1, 'HTTP 403 must fail fast without retrying');
+    assert.match(failFast403.stderr, /VERCEL_AUTOMATION_BYPASS_SECRET/);
+  });
+});
+
+describe('Suite C: Embedded commit-status script offline execution (mocked fetch)', () => {
+  const scriptSource = extractEmbeddedNodeScript(readWorkflowText(), 'commit-status');
+  const validSha = 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2';
+  const validRepo = 'tommardev/eshop-trust-checker';
+  const validRunUrl = 'https://github.com/tommardev/eshop-trust-checker/actions/runs/123456';
+
+  it('publishes success commit status with Authorization header, context smoke, and target_url', () => {
+    const token = 'ghs_mock_token_success_123';
+    const res = runEmbeddedCommitStatus({
+      scriptSource,
+      githubToken: token,
+      githubRepository: validRepo,
+      deploymentSha: validSha,
+      runUrl: validRunUrl,
+      smokeOutcome: 'success',
+      smokeDetail: 'Preview smoke checks passed (GET / 200, POST /api/check SSRF 400).',
+      mockSteps: [{ type: 'response', status: 201, body: '{}' }],
+    });
+
+    assert.strictEqual(res.exitCode, 0, `Expected exit 0, stderr: ${res.stderr}`);
+    assert.strictEqual(res.unexpectedCallError, null);
+    assert.strictEqual(res.fetchCalls.length, 1);
+
+    const call = res.fetchCalls[0];
+    assert.strictEqual(call.method, 'POST');
+    assert.strictEqual(
+      call.url,
+      `https://api.github.com/repos/${validRepo}/statuses/${validSha}`,
+    );
+    assert.strictEqual(call.headers.authorization, `Bearer ${token}`);
+    assert.strictEqual(call.hasSignal, true);
+
+    const payload = JSON.parse(call.body ?? '{}') as Record<string, string>;
+    assert.deepStrictEqual(payload, {
+      state: 'success',
+      context: 'smoke',
+      description: 'Preview smoke checks passed (GET / 200, POST /api/check SSRF 400).',
+      target_url: validRunUrl,
+    });
+  });
+
+  it('publishes failure commit status and truncates detail longer than 140 chars to 140 ending with ...', () => {
+    const longDetail = 'X'.repeat(180);
+    const res = runEmbeddedCommitStatus({
+      scriptSource,
+      githubToken: 'ghs_mock_token_failure_123',
+      githubRepository: validRepo,
+      deploymentSha: validSha,
+      runUrl: validRunUrl,
+      smokeOutcome: 'failure',
+      smokeDetail: longDetail,
+      mockSteps: [{ type: 'response', status: 201, body: '{}' }],
+    });
+
+    assert.strictEqual(res.exitCode, 0, `Expected exit 0, stderr: ${res.stderr}`);
+    assert.strictEqual(res.unexpectedCallError, null);
+    assert.strictEqual(res.fetchCalls.length, 1);
+
+    const payload = JSON.parse(res.fetchCalls[0].body ?? '{}') as Record<string, string>;
+    assert.strictEqual(payload.state, 'failure');
+    assert.strictEqual(payload.context, 'smoke');
+    assert.strictEqual(payload.description.length, 140);
+    assert.ok(payload.description.endsWith('...'));
+    assert.strictEqual(payload.description, `${'X'.repeat(137)}...`);
+  });
+
+  it('publishes error commit status with setup-failed fallback when smoke-probe outcome is skipped', () => {
+    const res = runEmbeddedCommitStatus({
+      scriptSource,
+      githubToken: 'ghs_mock_token_skipped_123',
+      githubRepository: validRepo,
+      deploymentSha: validSha,
+      runUrl: validRunUrl,
+      smokeOutcome: 'skipped',
+      smokeDetail: '',
+      mockSteps: [{ type: 'response', status: 201, body: '{}' }],
+    });
+
+    assert.strictEqual(res.exitCode, 0, `Expected exit 0, stderr: ${res.stderr}`);
+    assert.strictEqual(res.unexpectedCallError, null);
+    assert.strictEqual(res.fetchCalls.length, 1);
+
+    const payload = JSON.parse(res.fetchCalls[0].body ?? '{}') as Record<string, string>;
+    assert.strictEqual(payload.state, 'error');
+    assert.strictEqual(payload.context, 'smoke');
+    assert.match(payload.description, /setup failed/i);
+  });
+
+  it('rejects invalid DEPLOYMENT_SHA and invalid GITHUB_REPOSITORY before issuing fetch', () => {
+    const invalidInputs = [
+      { repo: validRepo, sha: 'not-a-sha' },
+      { repo: validRepo, sha: 'a1b2c3' },
+      { repo: validRepo, sha: '' },
+      { repo: 'invalid-repo-without-slash', sha: validSha },
+      { repo: 'owner/repo/extra', sha: validSha },
+      { repo: '', sha: validSha },
+    ];
+
+    for (const entry of invalidInputs) {
+      const res = runEmbeddedCommitStatus({
+        scriptSource,
+        githubToken: 'ghs_mock_token_invalid_123',
+        githubRepository: entry.repo,
+        deploymentSha: entry.sha,
+        runUrl: validRunUrl,
+        smokeOutcome: 'success',
+        smokeDetail: 'OK',
+        mockSteps: [],
+      });
+
+      assert.notStrictEqual(
+        res.exitCode,
+        0,
+        `Expected non-zero exit for repo="${entry.repo}" sha="${entry.sha}"`,
+      );
+      assert.strictEqual(res.fetchCalls.length, 0);
+      assert.strictEqual(res.unexpectedCallError, null);
+    }
+  });
+
+  it('fails non-zero cleanly on non-2xx GitHub API responses without leaking GITHUB_TOKEN', () => {
+    const secretToken = 'ghs_super_secret_github_token_999';
+
+    for (const status of [422, 500]) {
+      const res = runEmbeddedCommitStatus({
+        scriptSource,
+        githubToken: secretToken,
+        githubRepository: validRepo,
+        deploymentSha: validSha,
+        runUrl: validRunUrl,
+        smokeOutcome: 'success',
+        smokeDetail: 'OK',
+        mockSteps: [
+          {
+            type: 'response',
+            status,
+            body: `GitHub API error echoing ${secretToken}`,
+          },
+        ],
+      });
+
+      assert.notStrictEqual(res.exitCode, 0, `Expected non-zero exit for HTTP ${status}`);
+      assert.strictEqual(res.unexpectedCallError, null);
+      assert.strictEqual(res.fetchCalls.length, 1);
+      assert.match(res.stderr, new RegExp(`HTTP ${status}`));
+      assert.strictEqual(res.stdout.includes(secretToken), false);
+      assert.strictEqual(res.stderr.includes(secretToken), false);
+    }
   });
 });

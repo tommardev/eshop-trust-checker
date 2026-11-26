@@ -10,8 +10,18 @@ export async function POST(request: NextRequest) {
   if (!auth.authorized) {
     return NextResponse.json(
       { error: 'Neautorizuota užklausa. Reikalingas galiojantis sinchronizavimo raktas.' },
-      { status: 401, headers: { 'Cache-Control': 'no-store' } }
+      {
+        status: 401,
+        headers: {
+          'Cache-Control': 'no-store',
+          'WWW-Authenticate': 'Bearer realm="sync-blacklist"',
+        },
+      }
     );
+  }
+
+  if (auth.mode === 'disabled' && process.env.VERCEL === '1') {
+    console.warn('POST /api/sync-blacklist is running without SYNC_BLACKLIST_SECRET on Vercel.');
   }
 
   try {
