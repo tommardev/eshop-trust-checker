@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/tommardev/eshop-trust-checker/compare/v0.1.4...v0.1.5) (2026-11-27)
+
+
+### Features
+
+* verify Node runtime, guard sync-blacklist, and add preview smoke check ([#42](https://github.com/tommardev/eshop-trust-checker/issues/42)) ([f1ef998](https://github.com/tommardev/eshop-trust-checker/commit/f1ef9983bacd7bc52941353e7457b721df335bd9))
+
 ## [0.1.4](https://github.com/tommardev/eshop-trust-checker/compare/v0.1.3...v0.1.4) (2026-11-25)
 
 
