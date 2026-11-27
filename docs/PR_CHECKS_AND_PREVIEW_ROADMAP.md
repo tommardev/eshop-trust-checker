@@ -116,7 +116,7 @@ Give reviewers and stakeholders a live URL for every feature PR and `main` while
 | **Cloud Run / Firebase App Hosting / Railway** | Persistent or container Node.js (`npm run start`) | No serverless timeout or socket quirks; keeps in-memory `VvtatChecker.blockedSet` warm | Needs custom GitHub Actions workflow for per-PR preview cleanup (except Railway/Firebase PR previews) |
 | **GitHub Pages** *(Unsupported / Excluded)* | Static files only (`output: 'export'`) | Free for public static sites | **Not viable:** breaks `force-dynamic` API routes (`/api/check`, `/api/sync-blacklist`), `node:tls`, `node:dns/promises`, `node:net`, and has no native per-PR preview URLs |
 
-- [ ] **3.1 Verify Next.js production config and Node.js runtime compatibility**
+- [x] **3.1 Verify Next.js production config and Node.js runtime compatibility**
   - **Why:** `src/lib/ssl-checker.ts` uses `node:tls` (`tls.connect` on port 443) and `src/lib/security.ts` uses `node:dns/promises` and `node:net`. Static export (`output: 'export'`) and Edge runtime (`runtime = 'edge'`) will break API routes.
   - **Files:** `next.config.mjs` (create only if needed), `src/app/api/check/route.ts`, `src/app/api/sync-blacklist/route.ts`
   - **Steps:**
@@ -124,7 +124,7 @@ Give reviewers and stakeholders a live URL for every feature PR and `main` while
     2. Test `npm run build` and `npm run start` locally, then hit `GET /` and `POST /api/check`.
   - **Verify:** Local production server renders `/` and returns JSON from `POST /api/check`.
 
-- [ ] **3.2 Protect unauthenticated / unthrottled endpoints on public previews**
+- [x] **3.2 Protect unauthenticated / unthrottled endpoints on public previews**
   - **Why:** `POST /api/sync-blacklist` has no authentication, and `/api/check` does not have rate limiting yet (tracked in Issue `#6`). Sharing an unprotected public URL exposes outbound scraping/refresh endpoints.
   - **Files:** Deployment platform protection settings and/or `src/app/api/sync-blacklist/route.ts`
   - **Steps:**
@@ -140,7 +140,7 @@ Give reviewers and stakeholders a live URL for every feature PR and `main` while
     3. Verify preview builds update on PR commits and `main` updates the staging/production URL.
   - **Verify:** Opening/pushing to a PR creates a GitHub Deployment and a working `https://...` preview URL.
 
-- [ ] **3.4 Add automated preview smoke check (`#15`)**
+- [x] **3.4 Add automated preview smoke check (`#15`)**
   - **Files:** `.github/workflows/preview-smoke.yml`
   - **Steps:**
     1. Trigger on `deployment_status` (`if: github.event.deployment_status.state == 'success'`) with minimal `permissions: { deployments: read, statuses: write }`, `timeout-minutes: 5`, and SHA-pinned actions.
@@ -259,3 +259,4 @@ Add these once UI components (`#7`, `#8`), `/api/check` (`#6`), and test suite (
 | 2026-11-23 | 3.3 | Manual / Vercel | Connected Vercel GitHub App (`https://eshop-trust-checker.vercel.app`) with automatic PR previews; recorded in `docs/agents/stack.md` and commented on Issue #15. |
 | 2026-11-25 | 2.1–2.5 | `feat/issue-14-core-ci-workflow` (Issue #14) | Added `.github/workflows/ci.yml` with 40-char SHA-pinned `node24` actions, parallel `lint`/`typecheck`/`test`/`build` jobs, `.next/cache`, `$GITHUB_STEP_SUMMARY`, and offline `ci-workflow.test.ts`; Task `2.6` pending live PR check run. |
 | 2026-11-25 | 2.6, 4.4, 5.4 | `feat/issue-32-codeql-security-ruleset` (Issue #32) | Verified Core CI checks (`lint`, `typecheck`, `test`, `build`) green on PR `#38`; added hardened `.github/workflows/codeql.yml` (`javascript-typescript`, `security-extended`) with offline `codeql-workflow.test.ts` and live `CI`/`CodeQL` README badges; enabled Secret Scanning, Push Protection, Private Vulnerability Reporting, and active `Protect main` Ruleset (Repository Admin bypass `actor_id: 5`). |
+| 2026-11-26 | 3.1, 3.2, 3.4 | `feat/issue-15-preview-runtime-sync-guard-and-smoke-check` (Issue #15) | Locked `/api/check` and `/api/sync-blacklist` to `runtime = 'nodejs'`, added fail-closed `SYNC_BLACKLIST_SECRET` auth guard (`SyncBlacklistAuth`, `.env.example`), created hardened `.github/workflows/preview-smoke.yml` with dual `repository_dispatch` (`vercel.deployment.success`) + `deployment_status` trigger support, project-scoped Vercel bypass guard, and `commit-status` / Markdown summary hardening; verified with offline auth/smoke unit tests plus local `next start` probe. |
